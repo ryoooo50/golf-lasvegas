@@ -72,13 +72,10 @@ export function calculateHoleResult(params: CalculateHoleResultParams): HoleResu
     // 4. Calculate Push Multiplier
     let totalPushCount = 0;
     Object.values(scores).forEach(s => {
-        if (s.usePush) totalPushCount++;
+        totalPushCount += (s.pushCount || 0);
     });
 
-    let pushMultiplier = 1;
-    if (totalPushCount > 0) {
-        pushMultiplier = 2 * totalPushCount;
-    }
+    let pushMultiplier = 1 + totalPushCount;
 
     // 5. Final Points Calculation
     const finalPoints = diff * pushMultiplier * currentCarryOverMultiplier;
