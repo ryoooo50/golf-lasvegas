@@ -11,12 +11,19 @@ Vercel (https://vercel.com) を使うと無料で簡単に公開できます。
 
 1.  **Vercelにログイン**し、「Add New ...」 -> 「Project」を選択。
 2.  GitHubアカウントを接続し、このリポジトリ（`golf-lasvegas`）をインポート。
-3.  **Framework Preset** は `Other` または `Expo` を選択。
-4.  **Build and Output Settings** を以下のように設定してください（重要！）:
-    *   **Build Command**: `npx expo export -p web`
+3.  **Framework Preset** は `Other` を選択（`Expo` ではなく `Other` 推奨）。
+4.  **Build and Output Settings** を以下のように設定してください（**ここが最重要です**）:
+    *   **Build Command**: `npm run build:web`
     *   **Output Directory**: `dist`
-    *   **Install Command**: `npm install` (またはデフォルトのまま)
+    *   **Install Command**: `npm install` (そのままでOK)
+    *   ※ スイッチを「Override」にして入力してください。
 5.  「Deploy」をクリック。
+
+## トラブルシューティング
+*   **404 Not Found になる場合**:
+    *   Vercelの Settings -> General -> Build & Development Settings を確認してください。
+    *   **Output Directory** が `dist` になっているか確認してください（デフォルトの `public` だと失敗します）。
+    *   修正したら「Redeploy」を行ってください。
 
 ## 3. スマホへのインストール方法 (PWA)
 デプロイが完了するとURLが発行されます（例: `https://golf-lasvegas.vercel.app`）。

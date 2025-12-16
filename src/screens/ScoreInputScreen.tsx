@@ -1,7 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, useWindowDimensions, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { Button, Chip, DataTable, Dialog, IconButton, Portal, RadioButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '../store/gameStore';
@@ -137,8 +137,19 @@ export const ScoreInputScreen = () => {
     };
 
     const handleScoreChange = (id: PlayerId, text: string) => {
+        // Allow empty string to clear the field
+        if (text === '') {
+            const newScores = { ...scores };
+            delete newScores[id]; // Removes key, making value undefined
+            setScores(newScores);
+            return;
+        }
+
         const val = parseInt(text, 10);
-        setScores(prev => ({ ...prev, [id]: isNaN(val) ? 0 : val }));
+        // Only update if it's a valid number
+        if (!isNaN(val)) {
+            setScores(prev => ({ ...prev, [id]: val }));
+        }
     };
 
     const togglePush = (id: PlayerId) => {
@@ -273,146 +284,148 @@ export const ScoreInputScreen = () => {
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                    <View style={styles.container}>
-                        <ScrollView ref={bgScrollRef} contentContainerStyle={styles.scrollContent}>
+                <View style={styles.container}>
+                    <ScrollView
+                        ref={bgScrollRef}
+                        contentContainerStyle={styles.scrollContent}
+                        keyboardShouldPersistTaps="handled"
+                    >
 
-                            {/* Par Selector */}
-                            <View style={[styles.parRow, !par && styles.parRowHighlight]}>
-                                <Text style={{ marginBottom: 4, fontWeight: 'bold', color: par ? '#888' : '#D32F2F', fontSize: par ? 14 : 16 }}>
-                                    {par ? 'Par' : `↑ ${t('common.selectParFirst')}`}
-                                </Text>
-                                <SegmentedButtons
-                                    density="high"
-                                    value={par?.toString() || ''}
-                                    onValueChange={val => setPar(parseInt(val))}
-                                    buttons={[
-                                        { value: '3', label: 'Par 3' },
-                                        { value: '4', label: 'Par 4' },
-                                        { value: '5', label: 'Par 5' },
-                                    ]}
-                                    style={[styles.parSeg, !par && styles.parSegPulse]}
-                                />
-                            </View>
-
-                            <View style={styles.listContainer}>
-                                {players.map(p => {
-                                    const currentPushCount = isFront9 ? p.pushUsageCount.front9 : p.pushUsageCount.back9;
-                                    const maxPush = settings.maxPushCountPerHalf;
-                                    const canPush = currentPushCount < maxPush;
-                                    const isPushing = pushes[p.id] || false;
-                                    const totalScore = getPlayerTotalScore(p.id);
-
-                                    const team = teamAssignments[p.id];
-                                    const isTeamA = team === 'A';
-                                    const cardBg = isTeamA ? COLOR_TEAM_A_BG : COLOR_TEAM_B_BG;
-                                    const cardText = isTeamA ? COLOR_TEAM_A_TEXT : COLOR_TEAM_B_TEXT;
-                                    const borderColor = isTeamA ? '#90CAF9' : '#F48FB1';
-
-                                    return (
-                                        <View key={p.id} style={[styles.playerCard, { backgroundColor: cardBg, borderColor }]}>
-                                            <TouchableOpacity
-                                                style={styles.nameSection}
-                                                onPress={() => openNameEditor(p.id, p.name)}
-                                            >
-                                                <Text
-                                                    style={[styles.playerName, { color: cardText }]}
-                                                    numberOfLines={1}
-                                                    adjustsFontSizeToFit
-                                                >
-                                                    {p.name}
-                                                </Text>
-                                                <View style={styles.totalScoreContainer}>
-                                                    <Text style={styles.totalScoreLabel}>Total:</Text>
-                                                    <Text style={styles.totalScoreValue}>
-                                                        {totalScore > 0 ? `+${totalScore}` : totalScore}
-                                                    </Text>
-                                                </View>
-                                            </TouchableOpacity>
-
-                                            <View style={styles.scoreSection}>
-                                                <TextInput
-                                                    mode="outlined"
-                                                    value={scores[p.id]?.toString() || ''}
-                                                    onChangeText={txt => handleScoreChange(p.id, txt)}
-                                                    keyboardType="number-pad"
-                                                    style={styles.scoreInput}
-                                                    contentStyle={styles.scoreInputContent}
-                                                    outlineColor={COLOR_BORDER}
-                                                    activeOutlineColor={cardText}
-                                                    dense
-                                                    disabled={par === null}
-                                                />
-                                            </View>
-
-                                            <View style={styles.controlsSection}>
-                                                <SegmentedButtons
-                                                    value={team}
-                                                    onValueChange={val => toggleTeam(p.id, val as 'A' | 'B')}
-                                                    density="high"
-                                                    buttons={[
-                                                        { value: 'A', label: 'A', style: { minWidth: 20 } },
-                                                        { value: 'B', label: 'B', style: { minWidth: 20 } },
-                                                    ]}
-                                                    style={styles.teamSeg}
-                                                />
-                                                <TouchableOpacity
-                                                    onPress={() => togglePush(p.id)}
-                                                    disabled={!canPush && !isPushing}
-                                                    style={[
-                                                        styles.pushButton,
-                                                        isPushing ? { backgroundColor: cardText } : { borderColor: cardText, borderWidth: 1 }
-                                                    ]}
-                                                >
-                                                    <Text style={{ fontSize: 10, color: isPushing ? 'white' : cardText }}>
-                                                        {t('common.push')} {currentPushCount}/{maxPush}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            </View>
-                                        </View>
-                                    );
-                                })}
-                            </View>
-
-                            {/* Par Guide Overlay if Par is null */}
-                            {!par && (
-                                <View style={styles.parGuideOverlay}>
-                                    <Text style={styles.parGuideText}>↑ {t('common.selectParFirst')}</Text>
-                                </View>
-                            )}
-
-                            {!isValidTeams && (
-                                <Text style={styles.errorText}>
-                                    {t('common.teamAssignmentError')}
-                                </Text>
-                            )}
-                        </ScrollView>
-
-                        {/* Footer Button - Update or Next & Save */}
-                        <View style={[styles.bottomContainer, { flexDirection: 'row', gap: 10 }]}>
-                            <Button
-                                mode="outlined"
-                                onPress={handleSaveGame}
-                                contentStyle={{ height: 50 }}
-                                style={{ flex: 1, borderRadius: 8, borderColor: '#aaa' }}
-                            >
-                                {t('common.saveGame')}
-                            </Button>
-                            <Button
-                                mode="contained"
-                                onPress={handleSubmit}
-                                contentStyle={{ height: 50 }}
-                                labelStyle={{ fontSize: 16, fontWeight: 'bold', color: '#ffffff' }}
-                                disabled={!canSubmit}
-                                buttonColor={COLOR_PRIMARY_ACTION}
-                                style={{ flex: 2, borderRadius: 8 }}
-                            >
-                                {isEditingExisting ? t('common.updateHole') : t('common.nextHole')}
-                            </Button>
+                        {/* Par Selector */}
+                        <View style={[styles.parRow, !par && styles.parRowHighlight]}>
+                            <Text style={{ marginBottom: 4, fontWeight: 'bold', color: par ? '#888' : '#D32F2F', fontSize: par ? 14 : 16 }}>
+                                {par ? 'Par' : `↑ ${t('common.selectParFirst')}`}
+                            </Text>
+                            <SegmentedButtons
+                                density="high"
+                                value={par?.toString() || ''}
+                                onValueChange={val => setPar(parseInt(val))}
+                                buttons={[
+                                    { value: '3', label: 'Par 3' },
+                                    { value: '4', label: 'Par 4' },
+                                    { value: '5', label: 'Par 5' },
+                                ]}
+                                style={[styles.parSeg, !par && styles.parSegPulse]}
+                            />
                         </View>
 
+                        <View style={styles.listContainer}>
+                            {players.map(p => {
+                                const currentPushCount = isFront9 ? p.pushUsageCount.front9 : p.pushUsageCount.back9;
+                                const maxPush = settings.maxPushCountPerHalf;
+                                const canPush = currentPushCount < maxPush;
+                                const isPushing = pushes[p.id] || false;
+                                const totalScore = getPlayerTotalScore(p.id);
+
+                                const team = teamAssignments[p.id];
+                                const isTeamA = team === 'A';
+                                const cardBg = isTeamA ? COLOR_TEAM_A_BG : COLOR_TEAM_B_BG;
+                                const cardText = isTeamA ? COLOR_TEAM_A_TEXT : COLOR_TEAM_B_TEXT;
+                                const borderColor = isTeamA ? '#90CAF9' : '#F48FB1';
+
+                                return (
+                                    <View key={p.id} style={[styles.playerCard, { backgroundColor: cardBg, borderColor }]}>
+                                        <TouchableOpacity
+                                            style={styles.nameSection}
+                                            onPress={() => openNameEditor(p.id, p.name)}
+                                        >
+                                            <Text
+                                                style={[styles.playerName, { color: cardText }]}
+                                                numberOfLines={1}
+                                                adjustsFontSizeToFit
+                                            >
+                                                {p.name}
+                                            </Text>
+                                            <View style={styles.totalScoreContainer}>
+                                                <Text style={styles.totalScoreLabel}>Total:</Text>
+                                                <Text style={styles.totalScoreValue}>
+                                                    {totalScore > 0 ? `+${totalScore}` : totalScore}
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
+
+                                        <View style={styles.scoreSection}>
+                                            <TextInput
+                                                mode="outlined"
+                                                value={scores[p.id]?.toString() || ''}
+                                                onChangeText={txt => handleScoreChange(p.id, txt)}
+                                                keyboardType="number-pad"
+                                                style={styles.scoreInput}
+                                                contentStyle={styles.scoreInputContent}
+                                                outlineColor={COLOR_BORDER}
+                                                activeOutlineColor={cardText}
+                                                dense
+                                                disabled={par === null}
+                                            />
+                                        </View>
+
+                                        <View style={styles.controlsSection}>
+                                            <SegmentedButtons
+                                                value={team}
+                                                onValueChange={val => toggleTeam(p.id, val as 'A' | 'B')}
+                                                density="high"
+                                                buttons={[
+                                                    { value: 'A', label: 'A', style: { minWidth: 20 } },
+                                                    { value: 'B', label: 'B', style: { minWidth: 20 } },
+                                                ]}
+                                                style={styles.teamSeg}
+                                            />
+                                            <TouchableOpacity
+                                                onPress={() => togglePush(p.id)}
+                                                disabled={!canPush && !isPushing}
+                                                style={[
+                                                    styles.pushButton,
+                                                    isPushing ? { backgroundColor: cardText } : { borderColor: cardText, borderWidth: 1 }
+                                                ]}
+                                            >
+                                                <Text style={{ fontSize: 10, color: isPushing ? 'white' : cardText }}>
+                                                    {t('common.push')} {currentPushCount}/{maxPush}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                );
+                            })}
+                        </View>
+
+                        {/* Par Guide Overlay if Par is null */}
+                        {!par && (
+                            <View style={styles.parGuideOverlay}>
+                                <Text style={styles.parGuideText}>↑ {t('common.selectParFirst')}</Text>
+                            </View>
+                        )}
+
+                        {!isValidTeams && (
+                            <Text style={styles.errorText}>
+                                {t('common.teamAssignmentError')}
+                            </Text>
+                        )}
+                    </ScrollView>
+
+                    {/* Footer Button - Update or Next & Save */}
+                    <View style={[styles.bottomContainer, { flexDirection: 'row', gap: 10 }]}>
+                        <Button
+                            mode="outlined"
+                            onPress={handleSaveGame}
+                            contentStyle={{ height: 50 }}
+                            style={{ flex: 1, borderRadius: 8, borderColor: '#aaa' }}
+                        >
+                            {t('common.saveGame')}
+                        </Button>
+                        <Button
+                            mode="contained"
+                            onPress={handleSubmit}
+                            contentStyle={{ height: 50 }}
+                            labelStyle={{ fontSize: 16, fontWeight: 'bold', color: '#ffffff' }}
+                            disabled={!canSubmit}
+                            buttonColor={COLOR_PRIMARY_ACTION}
+                            style={{ flex: 2, borderRadius: 8 }}
+                        >
+                            {isEditingExisting ? t('common.updateHole') : t('common.nextHole')}
+                        </Button>
                     </View>
-                </TouchableWithoutFeedback>
+
+                </View>
             </KeyboardAvoidingView>
 
             {/* Dialogs */}
