@@ -22,8 +22,15 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
+      "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "Golf LasVegas",
+      "shortName": "Golf LV",
+      "display": "standalone",
+      "themeColor": "#000000",
+      "backgroundColor": "#000000",
+      "description": "Las Vegas Golf 2vs2 Score App"
     },
     "plugins": [
       "expo-router",

@@ -1,0 +1,40 @@
+export default {
+    translation: {
+        common: {
+            par: "パー",
+            nextHole: "次のホールへ",
+            updateHole: "スコアを更新",
+            push: "プッシュ",
+            birdie: "バーディー",
+            score: "スコア",
+            teamA: "チームA",
+            teamB: "チームB",
+            success: "完了",
+            holeCompleted: "ホールが完了しました！",
+            headerTitle: "ホール {{hole}}",
+            warning: "注意",
+            teamAssignmentError: "チームAとチームBにそれぞれ2人ずつ割り当ててください。",
+            selectParFirst: "最初にパーを選択してください",
+            restart: "最初から",
+            startGame: "試合開始",
+            selectStart: "スタートコースを選択",
+            out: "前半 (OUT)",
+            in: "後半 (IN)",
+            scorecard: "スコアカード",
+            pushCount: "プッシュ: {{count}}/{{max}}",
+            settings: "設定",
+            matchName: "コンペ名",
+            rate: "レート (1点あたり)",
+            pushLimit: "プッシュ上限 (ハーフあたり)",
+            saveGame: "保存して終了",
+            viewHistory: "履歴を見る",
+            confirmReset: "本当によろしいですか？現在のデータは失われます。",
+            roundSaved: "保存しました！",
+            historyTitle: "対戦履歴",
+            noHistory: "保存された履歴はありません。",
+            date: "日付",
+            helpTitle: "ルールと使い方",
+            helpContent: "【ラスベガスの基本】\n2対2のチーム戦です。\n2人のスコアを連結して（例: 4と5なら45点）チームの得点とします。\n相手チームとの点数差が得点・失点になります。\n\n【バーディーフリップ】\n相手チームがバーディー（パー未満）を取ると、こちらの点数が「連結の逆順（例: 45 -> 54）」になり、負け分が大きくなることがあります。\n\n【プッシュ】\n倍率を2倍にします。前半・後半で使用回数制限があります。\n\n【キャリーオーバー】\n引き分けの場合、得点は発生せず、次のホールの倍率が上がります。"
+        }
+    }
+};

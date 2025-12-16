@@ -1,0 +1,39 @@
+export default {
+    translation: {
+        common: {
+            par: "Par",
+            nextHole: "Next Hole",
+            updateHole: "Update Score",
+            push: "Push",
+            birdie: "Birdie",
+            score: "Score",
+            teamA: "Team A",
+            teamB: "Team B",
+            success: "Success",
+            holeCompleted: "Hole completed!",
+            headerTitle: "Hole {{hole}}",
+            warning: "Warning",
+            teamAssignmentError: "Please assign exactly 2 players to Team A and 2 to Team B.",
+            selectParFirst: "Select Par First",
+            restart: "Restart",
+            startGame: "Start Match",
+            selectStart: "Select Starting Course",
+            in: "Back 9 (IN)",
+            scorecard: "Scorecard",
+            pushCount: "Push: {{count}}/{{max}}",
+            settings: "Settings",
+            matchName: "Match Name",
+            rate: "Rate (Money per point)",
+            pushLimit: "Push Limit (Per half)",
+            saveGame: "Save & Finish",
+            viewHistory: "View History",
+            confirmReset: "Are you sure? Current game data will be lost.",
+            roundSaved: "Round Saved!",
+            historyTitle: "Match History",
+            noHistory: "No saved matches found.",
+            date: "Date",
+            helpTitle: "Rules & Usage",
+            helpContent: "Vegas Logic:\n2 vs 2 Match play. The team score is formed by combining the two scores (e.g., 4 and 5 becomes 45).\nThe difference between team scores is the points exchanged.\n\nBirdie Flip:\nIf a team gets a birdie (under par), the opponent team's score is flipped (e.g. 45 -> 54), often resulting in a larger loss.\n\nPush:\nDoubles the points for the current hole. Can be used limited times per half.\n\nCarryOver:\nIf scores are tied, points carry over to the next hole (multiplier increases)."
+        }
+    }
+};
