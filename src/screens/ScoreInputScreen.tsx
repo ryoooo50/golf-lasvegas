@@ -45,6 +45,16 @@ export const ScoreInputScreen = () => {
     const [isSetupVisible, setIsSetupVisible] = useState(history.length === 0 && currentHole === 1);
     const [isSettingsVisible, setIsSettingsVisible] = useState(false);
 
+    // Par Selection Dialog
+    // Show if par is null AND we are not in setup mode
+    const [isParDialogVisible, setIsParDialogVisible] = useState(false);
+
+    useEffect(() => {
+        if (!isSetupVisible && par === null) {
+            setIsParDialogVisible(true);
+        }
+    }, [isSetupVisible, par]);
+
     // Setup Fields
     const [startCourse, setStartCourse] = useState<'OUT' | 'IN'>('OUT');
     const [matchName, setMatchName] = useState('');
@@ -324,23 +334,15 @@ export const ScoreInputScreen = () => {
                         keyboardShouldPersistTaps="handled"
                     >
 
-                        {/* Par Selector */}
-                        <View style={[styles.parRow, !par && styles.parRowHighlight]}>
-                            <Text style={{ marginBottom: 4, fontWeight: 'bold', color: par ? '#888' : '#D32F2F', fontSize: par ? 14 : 16 }}>
-                                {par ? 'Par' : `↑ ${t('common.selectParFirst')}`}
+                        {/* Par Display / Edit */}
+                        <TouchableOpacity onPress={() => setIsParDialogVisible(true)} style={[styles.parRow, !par && styles.parRowHighlight]}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: par ? '#333' : '#D32F2F', textAlign: 'center' }}>
+                                {par ? `Par ${par}` : `Tap to Select Par`}
                             </Text>
-                            <SegmentedButtons
-                                density="high"
-                                value={par?.toString() || ''}
-                                onValueChange={val => setPar(parseInt(val))}
-                                buttons={[
-                                    { value: '3', label: 'Par 3' },
-                                    { value: '4', label: 'Par 4' },
-                                    { value: '5', label: 'Par 5' },
-                                ]}
-                                style={[styles.parSeg, !par && styles.parSegPulse]}
-                            />
-                        </View>
+                            <Text style={{ fontSize: 12, color: '#666', textAlign: 'center', marginTop: 2 }}>
+                                {t('common.tapToChange')}
+                            </Text>
+                        </TouchableOpacity>
 
                         <View style={styles.listContainer}>
                             {players.map(p => {
@@ -425,12 +427,7 @@ export const ScoreInputScreen = () => {
                             })}
                         </View>
 
-                        {/* Par Guide Overlay if Par is null */}
-                        {!par && (
-                            <View style={styles.parGuideOverlay}>
-                                <Text style={styles.parGuideText}>↑ {t('common.selectParFirst')}</Text>
-                            </View>
-                        )}
+
 
                         {!isValidTeams && (
                             <Text style={styles.errorText}>
@@ -607,9 +604,30 @@ export const ScoreInputScreen = () => {
                     </Dialog.Actions>
                 </Dialog>
 
+                {/* Par Selection Dialog */}
+                <Dialog visible={isParDialogVisible} dismissable={false}>
+                    <Dialog.Title style={{ textAlign: 'center' }}>{t('common.selectPar') || 'Select Par'}</Dialog.Title>
+                    <Dialog.Content>
+                        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
+                            {[3, 4, 5].map(p => (
+                                <Button
+                                    key={p}
+                                    mode="contained"
+                                    onPress={() => { setPar(p); setIsParDialogVisible(false); }}
+                                    style={{ flex: 1, marginHorizontal: 4 }}
+                                    contentStyle={{ height: 60 }}
+                                    labelStyle={{ fontSize: 24, fontWeight: 'bold' }}
+                                >
+                                    {p}
+                                </Button>
+                            ))}
+                        </View>
+                    </Dialog.Content>
+                </Dialog>
+
             </Portal>
 
-        </View>
+        </View >
     );
 };
 
@@ -760,18 +778,7 @@ const styles = StyleSheet.create({
         minWidth: 80,
         alignItems: 'center',
     },
-    parGuideOverlay: {
-        position: 'absolute',
-        top: 200,
-        alignSelf: 'center',
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        padding: 12,
-        borderRadius: 8,
-    },
-    parGuideText: {
-        color: 'white',
-        fontWeight: 'bold',
-    },
+
     errorText: {
         color: '#D32F2F',
         textAlign: 'center',
