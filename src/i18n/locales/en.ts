@@ -21,6 +21,7 @@ export default {
             out: "Front 9",
             in: "Back 9",
             tapToChange: "Select Par",
+            selectPar: "Select Par",
             scorecard: "Scorecard",
             pushCount: "Push: {{count}}/{{max}}",
             settings: "Settings",

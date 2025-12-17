@@ -21,6 +21,7 @@ export default {
             out: "前半",
             in: "後半",
             tapToChange: "パーを選択",
+            selectPar: "パーを選択",
             scorecard: "スコアカード",
             pushCount: "プッシュ: {{count}}/{{max}}",
             settings: "設定",
