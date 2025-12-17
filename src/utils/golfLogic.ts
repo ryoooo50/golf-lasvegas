@@ -69,16 +69,21 @@ export function calculateHoleResult(params: CalculateHoleResultParams): HoleResu
         isDraw = true;
     }
 
-    // 4. Calculate Push Multiplier
+    // 4. Calculate Rate (Multiplier)
+    const carryOverCount = Math.max(0, currentCarryOverMultiplier - 1);
+
     let totalPushCount = 0;
+    let hasAnyBirdie = false;
     Object.values(scores).forEach(s => {
         totalPushCount += (s.pushCount || 0);
+        if (s.isBirdie) hasAnyBirdie = true;
     });
 
-    let pushMultiplier = 1 + totalPushCount;
+    const count = carryOverCount + totalPushCount + (hasAnyBirdie ? 1 : 0);
+    const finalRate = (count === 0) ? 1 : count * 2;
 
     // 5. Final Points Calculation
-    const finalPoints = diff * pushMultiplier * currentCarryOverMultiplier;
+    const finalPoints = diff * finalRate;
 
     const pointsResult: Record<PlayerId, number> = {};
 
@@ -86,16 +91,6 @@ export function calculateHoleResult(params: CalculateHoleResultParams): HoleResu
     [...teamA_Ids, ...teamB_Ids].forEach(id => pointsResult[id] = 0);
 
     if (!isDraw && winningTeamIds && losingTeamIds) {
-        // Winners receive points (+), Losers pay points (-)
-        // Convention: Each winner gets `finalPoints` from each loser? 
-        // Usually in Vegas 2vs2: 
-        //   Win -> +Points (from opponent pair?)
-        //   Wait, typically if A wins by 10 pts, A1 gets +10, A2 gets +10, B1 gets -10, B2 gets -10.
-        //   Let's check specification.md... "プラスは受取、マイナスは支払".
-        //   Standard Vegas is individual net calculation often, but here it's team-based.
-        //   "TeamA_Score vs TeamB_Score". Diff is team diff.
-        //   Implied: Each member of winning team gets +FinalPoints. Each member of losing team gets -FinalPoints.
-
         winningTeamIds.forEach(id => pointsResult[id] = finalPoints);
         losingTeamIds.forEach(id => pointsResult[id] = -finalPoints);
     }
@@ -110,7 +105,29 @@ export function calculateHoleResult(params: CalculateHoleResultParams): HoleResu
         teamB_Ids: params.teamB_Ids,
         carryOverMultiplier: currentCarryOverMultiplier,
         isDraw,
+        appliedMultiplier: finalRate,
         pointsResult,
         nextHoleMultiplier: nextMultiplier,
     };
+}
+
+/**
+ * Helper to calculate the current hole's rate for real-time display.
+ */
+export function calculateCurrentHoleRate(
+    currentCarryOverMultiplier: number,
+    scores: Record<PlayerId, ScoreInput>
+): number {
+    const carryOverCount = Math.max(0, currentCarryOverMultiplier - 1);
+
+    let totalPushCount = 0;
+    let hasAnyBirdie = false;
+
+    Object.values(scores).forEach(s => {
+        totalPushCount += (s.pushCount || 0);
+        if (s.isBirdie) hasAnyBirdie = true;
+    });
+
+    const count = carryOverCount + totalPushCount + (hasAnyBirdie ? 1 : 0);
+    return (count === 0) ? 1 : count * 2;
 }

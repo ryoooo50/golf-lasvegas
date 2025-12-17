@@ -46,7 +46,7 @@ const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
     ],
     currentHole: 1,
     history: [],
-    gameStatus: 'playing',
+    gameStatus: 'menu',
     settings: {
         rate: 10,
         maxPushCountPerHalf: 2,

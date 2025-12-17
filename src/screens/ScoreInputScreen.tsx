@@ -6,6 +6,7 @@ import { Button, Chip, DataTable, Dialog, IconButton, Portal, RadioButton, Segme
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '../store/gameStore';
 import { PlayerId, ScoreInput } from '../types';
+import { calculateCurrentHoleRate } from '../utils/golfLogic';
 
 // Colors
 const COLOR_TEAM_A_BG = '#E3F2FD';
@@ -263,6 +264,29 @@ export const ScoreInputScreen = () => {
 
     const isEditingExisting = history.some(h => h.holeNumber === currentHole);
 
+    // Live Rate Calculation
+    const currentHoleData = history.find(h => h.holeNumber === currentHole);
+
+    const liveRate = React.useMemo(() => {
+        if (currentHoleData) {
+            return currentHoleData.appliedMultiplier ?? 1;
+        }
+
+        const tempScores: Record<PlayerId, ScoreInput> = {};
+        players.forEach(p => {
+            const s = scores[p.id] || 0;
+            // Check birdie: must have valid score and par
+            const isBirdie = (par !== null && s > 0 && s < par);
+            tempScores[p.id] = {
+                score: s,
+                isBirdie,
+                pushCount: pushCounts[p.id] || 0 // Correctly use number
+            };
+        });
+
+        return calculateCurrentHoleRate(nextHoleMultiplier, tempScores);
+    }, [scores, pushCounts, par, nextHoleMultiplier, currentHoleData, players]);
+
     return (
         <View style={styles.root}>
             <StatusBar style="light" backgroundColor="#000000" />
@@ -313,7 +337,7 @@ export const ScoreInputScreen = () => {
                     </View>
 
                     <View style={styles.infoBar}>
-                        <Chip icon="flag" mode="outlined" textStyle={{ color: '#ffffff' }} style={styles.chip}>x{nextHoleMultiplier}</Chip>
+                        <Chip icon="flag" mode="outlined" textStyle={{ color: '#ffffff' }} style={styles.chip}>x{liveRate}</Chip>
                         <Text style={{ color: '#ddd', fontWeight: 'bold' }}>
                             {isFront9 ? t('common.out') : t('common.in')}
                         </Text>
