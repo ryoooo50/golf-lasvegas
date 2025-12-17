@@ -31,7 +31,7 @@ export const ScoreInputScreen = () => {
     // Local state
     const [par, setPar] = useState<number | null>(null);
     const [scores, setScores] = useState<Record<PlayerId, number>>({});
-    const [pushCounts, setPushCounts] = useState<Record<PlayerId, number>>({}); // CHANGED: boolean -> number
+    const [pushes, setPushes] = useState<Record<PlayerId, boolean>>({});
     const [teamAssignments, setTeamAssignments] = useState<Record<PlayerId, 'A' | 'B'>>({});
 
     // Dialogs
@@ -78,24 +78,24 @@ export const ScoreInputScreen = () => {
         if (savedHole) {
             setPar(savedHole.par);
             const savedScores: Record<PlayerId, number> = {};
-            const savedPushCounts: Record<PlayerId, number> = {};
+            const savedPushes: Record<PlayerId, boolean> = {};
             const savedAssignments: Record<PlayerId, 'A' | 'B'> = {};
 
             Object.entries(savedHole.scores).forEach(([pid, val]) => {
                 savedScores[pid] = val.score;
-                savedPushCounts[pid] = val.pushCount || 0; // Fixed: usePush -> pushCount
+                savedPushes[pid] = val.usePush;
             });
 
             savedHole.teamA_Ids.forEach(id => savedAssignments[id] = 'A');
             savedHole.teamB_Ids.forEach(id => savedAssignments[id] = 'B');
 
             setScores(savedScores);
-            setPushCounts(savedPushCounts);
+            setPushes(savedPushes);
             setTeamAssignments(savedAssignments);
         } else {
             setPar(null); // Force selection
             setScores({});
-            setPushCounts({});
+            setPushes({});
 
             const { teamA, teamB } = getRecommendedPairs(currentHole);
             const newAssignments: Record<PlayerId, 'A' | 'B'> = {};
@@ -162,24 +162,8 @@ export const ScoreInputScreen = () => {
         }
     };
 
-    const cyclePush = (id: PlayerId) => {
-        const player = players.find(p => p.id === id);
-        if (!player) return;
-
-        const maxPush = settings.maxPushCountPerHalf;
-        const usedInHalf = isFront9 ? player.pushUsageCount.front9 : player.pushUsageCount.back9;
-        const available = Math.max(0, maxPush - usedInHalf);
-        const currentSelected = pushCounts[id] || 0;
-
-        // Logic: 0 -> 1 -> ... -> Available -> 0
-        // If available is 0, cannot push.
-        if (available === 0) return;
-
-        let nextVal = currentSelected + 1;
-        if (nextVal > available) {
-            nextVal = 0;
-        }
-        setPushCounts(prev => ({ ...prev, [id]: nextVal }));
+    const togglePush = (id: PlayerId) => {
+        setPushes(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
     const toggleTeam = (id: PlayerId, val: 'A' | 'B') => {
@@ -228,39 +212,22 @@ export const ScoreInputScreen = () => {
             scoreInputs[p.id] = {
                 score: s,
                 isBirdie: s < par,
-                pushCount: pushCounts[p.id] || 0, // Fixed
+                usePush: pushes[p.id] || false,
             };
         });
 
         const teamA_Ids: [PlayerId, PlayerId] = [teamA[0].id, teamA[1].id];
         const teamB_Ids: [PlayerId, PlayerId] = [teamB[0].id, teamB[1].id];
 
-        const doComplete = () => {
-            completeHole({
-                par,
-                scores: scoreInputs,
-                teamA_Ids,
-                teamB_Ids,
-                holeNumber: currentHole
-            });
-            // If 18H, we don't show "Next Hole", but we should probably inform user?
-            if (currentHole < 18) {
-                Alert.alert(t('common.success'), t('common.holeCompleted'));
-            }
-        };
+        completeHole({
+            par,
+            scores: scoreInputs,
+            teamA_Ids,
+            teamB_Ids,
+            holeNumber: currentHole
+        });
 
-        if (currentHole === 18) {
-            Alert.alert(
-                t('common.finishGame') || 'Finish Method',
-                t('common.confirmFinish') || 'End score input and go to result screen?',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'OK', onPress: doComplete }
-                ]
-            );
-        } else {
-            doComplete();
-        }
+        Alert.alert(t('common.success'), t('common.holeCompleted'));
     };
 
     const isEditingExisting = history.some(h => h.holeNumber === currentHole);
@@ -349,8 +316,7 @@ export const ScoreInputScreen = () => {
                                 const currentPushCount = isFront9 ? p.pushUsageCount.front9 : p.pushUsageCount.back9;
                                 const maxPush = settings.maxPushCountPerHalf;
                                 const canPush = currentPushCount < maxPush;
-                                const myPushCount = pushCounts[p.id] || 0;
-                                const isPushing = myPushCount > 0;
+                                const isPushing = pushes[p.id] || false;
                                 const totalScore = getPlayerTotalScore(p.id);
 
                                 const team = teamAssignments[p.id];
@@ -407,18 +373,15 @@ export const ScoreInputScreen = () => {
                                                 style={styles.teamSeg}
                                             />
                                             <TouchableOpacity
-                                                onPress={() => cyclePush(p.id)}
-                                                disabled={currentPushCount >= maxPush && !(pushCounts[p.id] || 0)}
+                                                onPress={() => togglePush(p.id)}
+                                                disabled={!canPush && !isPushing}
                                                 style={[
                                                     styles.pushButton,
-                                                    (pushCounts[p.id] || 0) > 0
-                                                        ? { backgroundColor: cardText }
-                                                        : { borderColor: cardText, borderWidth: 1 }
+                                                    isPushing ? { backgroundColor: cardText } : { borderColor: cardText, borderWidth: 1 }
                                                 ]}
                                             >
-                                                <Text style={{ fontSize: 10, color: (pushCounts[p.id] || 0) > 0 ? 'white' : cardText }}>
-                                                    {t('common.push')} {(pushCounts[p.id] || 0) > 0 ? `x${pushCounts[p.id]} ` : ''}
-                                                    {Math.max(0, maxPush - currentPushCount)}/{maxPush}
+                                                <Text style={{ fontSize: 10, color: isPushing ? 'white' : cardText }}>
+                                                    {t('common.push')} {currentPushCount}/{maxPush}
                                                 </Text>
                                             </TouchableOpacity>
                                         </View>
@@ -455,7 +418,7 @@ export const ScoreInputScreen = () => {
                             buttonColor={COLOR_PRIMARY_ACTION}
                             style={{ flex: 2, borderRadius: 8 }}
                         >
-                            {isEditingExisting ? t('common.updateHole') : (currentHole === 18 ? (t('common.finish') || 'Finish') : t('common.nextHole'))}
+                            {isEditingExisting ? t('common.updateHole') : t('common.nextHole')}
                         </Button>
                     </View>
 
