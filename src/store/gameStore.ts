@@ -259,6 +259,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 // Reset match name? Maybe. Let's keep for now or reset in UI.
             },
             currentHole: startHole,
+            gameStatus: 'playing',
         });
     },
 
