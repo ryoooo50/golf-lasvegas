@@ -12,7 +12,7 @@ export interface Player {
 export interface ScoreInput {
   score: number;
   isBirdie: boolean; // バーディー以上ならtrue
-  usePush: boolean;  // このホールでプッシュ権を行使するか
+  pushCount: number; // このホールでプッシュ権を何回行使するか (0 = なし)
 }
 
 export interface HoleResult {
@@ -41,12 +41,15 @@ export interface RoundResult {
   players: Player[];
   history: HoleResult[];
   finalScores: Record<PlayerId, number>;
+  gameStatus: 'playing' | 'finished';
+  currentHole: number;
 }
 
 export interface GameState {
   players: Player[];
   currentHole: number;
   history: HoleResult[];
+  gameStatus: 'playing' | 'finished';
 
   // 設定
   settings: {

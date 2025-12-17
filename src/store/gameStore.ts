@@ -46,10 +46,11 @@ const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
     ],
     currentHole: 1,
     history: [],
+    gameStatus: 'playing',
     settings: {
         rate: 10,
         maxPushCountPerHalf: 2,
-        language: 'ja', // Default to Japanese as requested
+        language: 'ja',
         matchName: '',
     },
     savedRounds: [],
@@ -81,27 +82,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
     completeHole: ({ par, scores, teamA_Ids, teamB_Ids, holeNumber }) => {
         const { players, history, settings, nextHoleMultiplier } = get();
 
+        // --- 1. Auto Use Push Logic (Hole 9 & 18) ---
+        let finalScores = { ...scores };
+        let pushedPlayers = [...players];
+
+        if (holeNumber === 9 || holeNumber === 18) {
+            const maxPush = settings.maxPushCountPerHalf;
+            // Force use ANY remaining push count
+            pushedPlayers = players.map(p => {
+                const usedInHalf = (holeNumber === 9) ? p.pushUsageCount.front9 : p.pushUsageCount.back9;
+                const remaining = Math.max(0, maxPush - usedInHalf);
+
+                if (remaining > 0) {
+                    finalScores[p.id] = {
+                        ...finalScores[p.id],
+                        pushCount: remaining // Force usage of all remaining
+                    };
+                }
+                return p;
+            });
+        }
+
+        // --- 2. Calculate Result ---
         const result = calculateHoleResult({
             holeNumber,
             par,
-            scores,
+            scores: finalScores,
             teamA_Ids,
             teamB_Ids,
             currentCarryOverMultiplier: nextHoleMultiplier,
         });
 
-        // 3. Update Push Usage Counts for players who used push
-        const updatedPlayers = players.map(p => {
-            const usedPush = scores[p.id]?.usePush || false;
-            if (usedPush) {
-                // Determine if front9 or back9 based on HOLE NUMBER (not just current state)
+        // --- 3. Update Push Usage Counts ---
+        // We use 'finalScores' because it contains auto-used pushes
+        const updatedPlayers = pushedPlayers.map(p => {
+            const usedCount = finalScores[p.id]?.pushCount || 0;
+            if (usedCount > 0) {
                 const isFront9 = holeNumber <= 9;
                 return {
                     ...p,
                     pushUsageCount: {
                         ...p.pushUsageCount,
-                        front9: isFront9 ? p.pushUsageCount.front9 + 1 : p.pushUsageCount.front9,
-                        back9: !isFront9 ? p.pushUsageCount.back9 + 1 : p.pushUsageCount.back9,
+                        front9: isFront9 ? p.pushUsageCount.front9 + usedCount : p.pushUsageCount.front9,
+                        back9: !isFront9 ? p.pushUsageCount.back9 + usedCount : p.pushUsageCount.back9,
                     }
                 };
             }
@@ -115,26 +138,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
         let newHistory = [...history];
 
         if (existingIndex !== -1) {
-            // Update existng
             newHistory[existingIndex] = newHoleResult;
-            // NOTE: Updating a past hole MIGHT invalidate subsequent multipliers (CarryOver).
-            // For full correctness, we would need to re-calculate ALL subsequent holes.
-            // That is complex. For now, we assume simple editing. 
-            // Ideally, we should warn user or only allow editing the LATEST hole.
-            // But user asked for "back and edit".
-            // Let's stick to simple replacement for now, acknowledging the "Butterfly Effect" risk on multipliers.
         } else {
-            // Append
             newHistory.push(newHoleResult);
-            // Sort history by hole number just in case
             newHistory.sort((a, b) => a.holeNumber - b.holeNumber);
+        }
+
+        // --- 4. Game End Check ---
+        let nextHole = holeNumber + 1;
+        let nextStatus: 'playing' | 'finished' = 'playing';
+
+        if (holeNumber === 18) {
+            nextStatus = 'finished';
+            nextHole = 18; // Stay on 18 if finished
         }
 
         set({
             history: newHistory,
             players: updatedPlayers,
-            currentHole: holeNumber + 1, // Auto advance? Or stay? Generally advance.
-            nextHoleMultiplier: result.nextHoleMultiplier // This sets multiplier for the NEXT new hole.
+            currentHole: nextHole,
+            gameStatus: nextStatus,
+            nextHoleMultiplier: result.nextHoleMultiplier
         });
     },
 
@@ -257,7 +281,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             name: settings.matchName || 'Untitled Match',
             players: players,
             history: history,
-            finalScores: finalScores
+            finalScores: finalScores,
+            gameStatus: 'finished', // Assume saving implies finished or snapshot
+            currentHole: get().currentHole
         };
 
         set({ savedRounds: [newRound, ...savedRounds] });
