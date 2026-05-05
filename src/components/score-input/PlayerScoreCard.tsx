@@ -90,12 +90,11 @@ export function PlayerScoreCard({
 
     return (
         <View style={[styles.card, { borderColor: cardBorderColor }]}>
-            {/* ヘッダー: アバター + 名前 + バーディーバッジ */}
+            {/* ヘッダー: アバター + 名前 + チームバッジ */}
             <View style={styles.cardHeader}>
                 <TouchableOpacity
                     style={[styles.avatar, { backgroundColor: teamColor }]}
                     onPress={() => onNamePress(player.id, player.name)}
-                    onLongPress={() => onTeamToggle(player.id, isTeamA ? 'B' : 'A')}
                 >
                     <Text style={styles.avatarText}>{initials}</Text>
                 </TouchableOpacity>
@@ -103,13 +102,19 @@ export function PlayerScoreCard({
                     <Text style={styles.playerName} numberOfLines={1}>{player.name}</Text>
                     <Text style={[styles.totalScore, { color: teamDeep }]}>{totalDisplay}pt</Text>
                 </View>
-                {(isAutoEagle || isAutoBirdie) && (
-                    <View style={styles.birdieBadge}>
+                <View style={styles.badgeColumn}>
+                    {(isAutoEagle || isAutoBirdie) && (
                         <Text style={styles.birdieBadgeText}>
                             {isAutoEagle ? '🦅' : '🐦'}
                         </Text>
-                    </View>
-                )}
+                    )}
+                    <TouchableOpacity
+                        style={[styles.teamBadge, { backgroundColor: teamColor }]}
+                        onPress={() => onTeamToggle(player.id, isTeamA ? 'B' : 'A')}
+                    >
+                        <Text style={styles.teamBadgeText}>{team}</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* スコアステッパー */}
@@ -178,15 +183,16 @@ const styles = StyleSheet.create({
     nameArea: { flex: 1, minWidth: 0 },
     playerName: { fontSize: 12, fontWeight: '700', color: C.ink, lineHeight: 15 },
     totalScore: { fontSize: 10, fontWeight: '700' },
-    birdieBadge: {
-        backgroundColor: C.goldTint,
-        borderRadius: 99,
-        paddingHorizontal: 5,
-        paddingVertical: 2,
-        borderWidth: 1,
-        borderColor: 'rgba(196,144,32,0.3)',
-    },
     birdieBadgeText: { fontSize: 13 },
+    badgeColumn: { alignItems: 'center', gap: 4 },
+    teamBadge: {
+        width: 24,
+        height: 24,
+        borderRadius: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    teamBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
     stepper: {
         flexDirection: 'row',
