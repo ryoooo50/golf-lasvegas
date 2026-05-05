@@ -98,10 +98,16 @@ export function PlayerScoreCard({
                 >
                     <Text style={styles.avatarText}>{initials}</Text>
                 </TouchableOpacity>
-                <View style={styles.nameArea}>
-                    <Text style={styles.playerName} numberOfLines={1}>{player.name}</Text>
+                <TouchableOpacity
+                    style={styles.nameArea}
+                    onPress={() => onNamePress(player.id, player.name)}
+                >
+                    <View style={styles.nameRow}>
+                        <Text style={styles.playerName} numberOfLines={1}>{player.name}</Text>
+                        <Text style={styles.editIcon}>✎</Text>
+                    </View>
                     <Text style={[styles.totalScore, { color: teamDeep }]}>{totalDisplay}pt</Text>
-                </View>
+                </TouchableOpacity>
                 <View style={styles.badgeColumn}>
                     {(isAutoEagle || isAutoBirdie) && (
                         <Text style={styles.birdieBadgeText}>
@@ -181,7 +187,9 @@ const styles = StyleSheet.create({
     },
     avatarText: { color: '#fff', fontSize: 11, fontWeight: '800' },
     nameArea: { flex: 1, minWidth: 0 },
-    playerName: { fontSize: 12, fontWeight: '700', color: C.ink, lineHeight: 15 },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    playerName: { fontSize: 12, fontWeight: '700', color: C.ink, lineHeight: 15, flexShrink: 1 },
+    editIcon: { fontSize: 10, color: C.ink4, lineHeight: 15 },
     totalScore: { fontSize: 10, fontWeight: '700' },
     birdieBadgeText: { fontSize: 13 },
     badgeColumn: { alignItems: 'center', gap: 4 },
