@@ -68,5 +68,19 @@ export default {
             defaultNameHint: "Enter name (optional)",
             startCourseLabel: "Starting Course",
         },
+        auth: {
+            loginTitle: "Login",
+            signupTitle: "Sign Up",
+            email: "Email",
+            password: "Password",
+            loginButton: "Log In",
+            signupButton: "Sign Up",
+            guestButton: "Play as Guest",
+            alreadyAccount: "Already have an account?",
+            noAccount: "Don't have an account?",
+            logoutButton: "Log Out",
+            cloudSaved: "Saved to cloud",
+            cloudSaveError: "Failed to save to cloud",
+        },
     }
 };

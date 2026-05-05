@@ -139,6 +139,8 @@ export interface GameState {
   pushUsed: Record<PlayerId, number>;
   // プレイヤーID → バーディー復活による追加プッシュ権利
   pushBonus: Record<PlayerId, number>;
+  // クラウド保存時の Supabase ラウンド ID（ゲスト時は null）
+  cloudRoundId: string | null;
 }
 
 // ─── 新ゲーム状態（新アーキテクチャ用） ──────────────────────────

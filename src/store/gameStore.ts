@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import i18n from '../i18n/i18n';
+import * as cloudSave from '../services/cloudSave';
+import { useAuthStore } from './authStore';
 import { GameState, HoleResult, Player, PlayerId, RoundResult, ScoreInput } from '../types';
 import { calculateHoleResult } from '../utils/golfLogic';
 
@@ -149,6 +151,7 @@ interface GameActions {
     startGame: (startHole: 1 | 10) => void;
     saveCurrentRound: () => void;
     resumeRound: (roundId: string) => void;
+    loadCloudRounds: () => Promise<void>;
 }
 
 type GameStore = GameState & GameActions;
@@ -179,6 +182,7 @@ const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
     playerRanking: [],
     pushUsed: {},
     pushBonus: {},
+    cloudRoundId: null,
 };
 
 // ─── ストア作成 ───────────────────────────────────────────────────────
@@ -348,6 +352,7 @@ export const useGameStore = create<GameStore>()(
                 set({
                     ...INITIAL_STATE,
                     savedRounds,
+                    cloudRoundId: null,
                     players: DEFAULT_PLAYERS.map(p => ({
                         ...p,
                         pushUsageCount: { front9: 0, back9: 0 },
@@ -462,7 +467,7 @@ export const useGameStore = create<GameStore>()(
 
             // ── ラウンド保存 ─────────────────────────────────────────
             saveCurrentRound: () => {
-                const { history, players, settings, savedRounds, getPlayerTotalScore } = get();
+                const { history, players, settings, savedRounds, getPlayerTotalScore, cloudRoundId } = get();
                 if (history.length === 0) return;
 
                 const finalScores: Record<PlayerId, number> = {};
@@ -482,6 +487,76 @@ export const useGameStore = create<GameStore>()(
                 };
 
                 set({ savedRounds: [newRound, ...savedRounds] });
+
+                // ── クラウド保存（ログインユーザーのみ） ──────────────
+                const authUser = useAuthStore.getState().user;
+                if (authUser) {
+                    const playerNames: Record<string, string> = {};
+                    const totalPoints: Record<string, number> = {};
+                    players.forEach(p => {
+                        playerNames[p.id] = p.name;
+                        totalPoints[p.id] = finalScores[p.id] ?? 0;
+                    });
+
+                    const roundData: cloudSave.RoundSaveData = {
+                        match_name: settings.matchName || 'Untitled Match',
+                        rate: settings.rate,
+                        player_count: settings.playerCount,
+                        player_names: playerNames,
+                        push_limit: settings.maxPushCountPerHalf,
+                        birdy_push_recovery: settings.birdyPushRecovery,
+                        holes: history,
+                        total_points: totalPoints,
+                    };
+
+                    if (cloudRoundId) {
+                        // 既存ラウンドを更新
+                        cloudSave.updateRound(cloudRoundId, roundData).catch(() => {
+                            // cloud save failure is non-fatal
+                        });
+                    } else {
+                        // 新規ラウンドを保存して cloudRoundId を記録
+                        cloudSave.saveRound(authUser.id, roundData)
+                            .then((id) => {
+                                set({ cloudRoundId: id });
+                            })
+                            .catch(() => {
+                                // cloud save failure is non-fatal
+                            });
+                    }
+                }
+            },
+
+            // ── クラウドラウンド読み込み ─────────────────────────────
+            loadCloudRounds: async () => {
+                const authUser = useAuthStore.getState().user;
+                if (!authUser) return;
+
+                try {
+                    const cloudRounds = await cloudSave.loadUserRounds(authUser.id);
+                    const mapped: RoundResult[] = cloudRounds.map((r) => ({
+                        id: r.id,
+                        date: r.created_at,
+                        name: r.match_name,
+                        players: Object.entries(r.player_names).map(([id, name]) => ({
+                            id,
+                            name,
+                            pushUsageCount: { front9: 0, back9: 0 },
+                        })),
+                        history: (r.holes as HoleResult[]) ?? [],
+                        finalScores: r.total_points,
+                        gameStatus: 'finished' as const,
+                        currentHole: 18,
+                    }));
+
+                    // ローカル履歴とマージ（IDで重複排除）
+                    const { savedRounds } = get();
+                    const localIds = new Set(savedRounds.map(r => r.id));
+                    const newRounds = mapped.filter(r => !localIds.has(r.id));
+                    set({ savedRounds: [...newRounds, ...savedRounds] });
+                } catch {
+                    // cloud load failure is non-fatal
+                }
             },
 
             // ── ラウンド再開 ─────────────────────────────────────────
@@ -531,6 +606,7 @@ export const useGameStore = create<GameStore>()(
                 playerRanking: state.playerRanking,
                 pushUsed: state.pushUsed,
                 pushBonus: state.pushBonus,
+                cloudRoundId: state.cloudRoundId,
             }),
             // 破損データのフォールバック
             onRehydrateStorage: () => (state, error) => {
@@ -542,6 +618,7 @@ export const useGameStore = create<GameStore>()(
                     if (!state.playerRanking) state.playerRanking = [];
                     if (!state.pushUsed) state.pushUsed = {};
                     if (!state.pushBonus) state.pushBonus = {};
+                    if (state.cloudRoundId === undefined) state.cloudRoundId = null;
                     if (state.settings && !('playerCount' in state.settings)) {
                         (state.settings as GameState['settings']).playerCount = 4;
                     }

@@ -68,5 +68,19 @@ export default {
             defaultNameHint: "名前を入力してください（任意）",
             startCourseLabel: "スタートコース",
         },
+        auth: {
+            loginTitle: "ログイン",
+            signupTitle: "新規登録",
+            email: "メールアドレス",
+            password: "パスワード",
+            loginButton: "ログイン",
+            signupButton: "登録",
+            guestButton: "ゲストとして開始",
+            alreadyAccount: "すでにアカウントをお持ちの方",
+            noAccount: "アカウントをお持ちでない方",
+            logoutButton: "ログアウト",
+            cloudSaved: "クラウドに保存しました",
+            cloudSaveError: "クラウド保存に失敗しました",
+        },
     }
 };
