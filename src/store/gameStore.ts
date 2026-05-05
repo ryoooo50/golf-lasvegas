@@ -1,49 +1,168 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import i18n from '../i18n/i18n';
 import { GameState, HoleResult, Player, PlayerId, RoundResult, ScoreInput } from '../types';
 import { calculateHoleResult } from '../utils/golfLogic';
 
+// ─── 定数 ──────────────────────────────────────────────────────────────
+const BOGEY_KUN_ID: PlayerId = 'bogey_kun';
+
+// ─── ボギーくんプレイヤー定義 ────────────────────────────────────────
+const BOGEY_KUN_PLAYER: Player = {
+    id: BOGEY_KUN_ID,
+    name: 'ボギーくん',
+    type: 'bogey_kun',
+    pushUsageCount: { front9: 0, back9: 0 },
+};
+
+// ─── ヘルパー: ランク付け ─────────────────────────────────────────────
+/**
+ * 個人スコア（ホール累計ポイント）でプレイヤーをランク付けする。
+ * 低スコア（ポイント少ない）ほど上位。同スコアの場合は現在のランク順を維持（stable sort）。
+ *
+ * @param playerIds    現在のプレイヤーIDリスト（P1→P4 順）
+ * @param history      確定済みホール結果リスト
+ * @param currentRanking 直前のランキング（同スコア時の安定ソート基準）
+ */
+function computeNextRanking(
+    playerIds: PlayerId[],
+    history: HoleResult[],
+    currentRanking: PlayerId[],
+): PlayerId[] {
+    // 累計ポイントを計算
+    const totalPoints: Record<PlayerId, number> = {};
+    for (const id of playerIds) {
+        totalPoints[id] = history.reduce((sum, h) => sum + (h.pointsResult[id] ?? 0), 0);
+    }
+
+    // 現在のランキングが空の場合は playerIds 順を初期順とする
+    const rankBase = currentRanking.length > 0 ? currentRanking : playerIds;
+
+    // 安定ソート: 同ポイントなら rankBase の順序を維持
+    const sorted = [...playerIds].sort((a, b) => {
+        const diff = (totalPoints[a] ?? 0) - (totalPoints[b] ?? 0);
+        if (diff !== 0) return diff;
+        // 同スコア: 前回ランクの順序で安定
+        return rankBase.indexOf(a) - rankBase.indexOf(b);
+    });
+
+    return sorted;
+}
+
+/**
+ * ホール番号とランキングからチームペアを決定する。
+ * (holeNumber - 1) % 3 でパターンを選択:
+ *   0 → P1+P2 vs P3+P4
+ *   1 → P1+P3 vs P2+P4
+ *   2 → P1+P4 vs P2+P3
+ */
+function computeTeamPairs(
+    holeNumber: number,
+    ranking: PlayerId[],
+): { teamA: [PlayerId, PlayerId]; teamB: [PlayerId, PlayerId] } {
+    const [p1, p2, p3, p4] = ranking;
+    const mod = (holeNumber - 1) % 3;
+
+    if (mod === 0) return { teamA: [p1, p2], teamB: [p3, p4] };
+    if (mod === 1) return { teamA: [p1, p3], teamB: [p2, p4] };
+    return { teamA: [p1, p4], teamB: [p2, p3] };
+}
+
+/**
+ * 3人モード時のソロプレイヤー（ボギーくんとペアになるプレイヤー）を特定する。
+ * teamA または teamB のうち bogey_kun が含まれている側の、もう一方のプレイヤーがソロ。
+ */
+function findSoloPlayer(
+    teamA: [PlayerId, PlayerId],
+    teamB: [PlayerId, PlayerId],
+): PlayerId | undefined {
+    if (teamA.includes(BOGEY_KUN_ID)) {
+        return teamA.find(id => id !== BOGEY_KUN_ID);
+    }
+    if (teamB.includes(BOGEY_KUN_ID)) {
+        return teamB.find(id => id !== BOGEY_KUN_ID);
+    }
+    return undefined;
+}
+
+/**
+ * プッシュ残り回数を返す。
+ * 残り = pushLimit + pushBonus[id] - pushUsed[id]
+ */
+function getRemainingPush(
+    id: PlayerId,
+    pushLimit: number,
+    pushUsed: Record<PlayerId, number>,
+    pushBonus: Record<PlayerId, number>,
+): number {
+    return pushLimit + (pushBonus[id] ?? 0) - (pushUsed[id] ?? 0);
+}
+
+// ─── アクション型定義 ──────────────────────────────────────────────────
 interface GameActions {
     addPlayer: (name: string) => void;
     updateSettings: (settings: Partial<GameState['settings']>) => void;
     setLanguage: (lang: 'en' | 'ja') => void;
+
     /**
-     * Calculates the result for the current hole, updates history, 
-     * adjusts multipliers, and advances to the next hole.
+     * ホールを確定する。
+     * 以下の順序で処理する:
+     *  1. スコアキャップ(9)
+     *  2. イーグル/バーディー判定
+     *  3. フリップ処理
+     *  4. 倍率計算
+     *  5. ポイント計算（3人モード時はソロ×2）
+     *  6. COLevel 更新
+     *  7. プッシュカウント更新・バーディー復活ボーナス付与
+     *  8. ハーフ切り替え(9→10)時のプッシュリセット
+     *  9. 次ホールのランク付け
+     * 10. AsyncStorage に保存
      */
     completeHole: (input: {
-        par: number,
-        scores: Record<PlayerId, ScoreInput>,
-        teamA_Ids: [PlayerId, PlayerId],
-        teamB_Ids: [PlayerId, PlayerId],
-        holeNumber: number // Explicitly pass hole number
+        par: number;
+        scores: Record<PlayerId, ScoreInput>;
+        teamA_Ids: [PlayerId, PlayerId];
+        teamB_Ids: [PlayerId, PlayerId];
+        holeNumber: number;
     }) => void;
+
     resetGame: () => void;
     updatePlayerName: (id: PlayerId, name: string) => void;
+
     /**
-     * Helper to get recommended team pairs based on the current hole and previous scores.
-     * Logic:
-     * - Order players by previous hole score (Honor order). If Hole 1, use current list order.
-     * - Pattern A (1,4,7...): 1&2 vs 3&4
-     * - Pattern B (2,5,8...): 1&3 vs 2&4
-     * - Pattern C (3,6,9...): 1&4 vs 2&3
+     * 推奨チームペアを返す。
+     * 動的ランキング（playerRanking）と (holeNumber-1)%3 パターンで決定する。
+     * playerRanking が空（ゲーム開始直後）の場合は players 配列順を使用。
      */
-    getRecommendedPairs: (holeNumber: number) => { teamA: [PlayerId, PlayerId], teamB: [PlayerId, PlayerId] };
+    getRecommendedPairs: (holeNumber: number) => { teamA: [PlayerId, PlayerId]; teamB: [PlayerId, PlayerId] };
+
     getPlayerTotalScore: (id: PlayerId) => number;
+
+    /**
+     * 指定プレイヤーのプッシュ残り回数を返す。
+     * bogey_kun は常に 0 を返す。
+     */
+    getRemainingPushForPlayer: (id: PlayerId) => number;
+
     goToHole: (holeNumber: number) => void;
     startGame: (startHole: 1 | 10) => void;
     saveCurrentRound: () => void;
+    resumeRound: (roundId: string) => void;
 }
 
 type GameStore = GameState & GameActions;
 
+// ─── 初期状態 ─────────────────────────────────────────────────────────
+const DEFAULT_PLAYERS: Player[] = [
+    { id: 'p1', name: 'Player A', pushUsageCount: { front9: 0, back9: 0 } },
+    { id: 'p2', name: 'Player B', pushUsageCount: { front9: 0, back9: 0 } },
+    { id: 'p3', name: 'Player C', pushUsageCount: { front9: 0, back9: 0 } },
+    { id: 'p4', name: 'Player D', pushUsageCount: { front9: 0, back9: 0 } },
+];
+
 const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
-    players: [
-        { id: 'p1', name: 'Player A', pushUsageCount: { front9: 0, back9: 0 } },
-        { id: 'p2', name: 'Player B', pushUsageCount: { front9: 0, back9: 0 } },
-        { id: 'p3', name: 'Player C', pushUsageCount: { front9: 0, back9: 0 } },
-        { id: 'p4', name: 'Player D', pushUsageCount: { front9: 0, back9: 0 } },
-    ],
+    players: DEFAULT_PLAYERS,
     currentHole: 1,
     history: [],
     gameStatus: 'menu',
@@ -52,241 +171,388 @@ const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
         maxPushCountPerHalf: 2,
         language: 'ja',
         matchName: '',
+        playerCount: 4,
+        birdyPushRecovery: false,
     },
     savedRounds: [],
     nextHoleMultiplier: 1,
+    playerRanking: [],
+    pushUsed: {},
+    pushBonus: {},
 };
 
-export const useGameStore = create<GameStore>((set, get) => ({
-    ...INITIAL_STATE,
+// ─── ストア作成 ───────────────────────────────────────────────────────
+export const useGameStore = create<GameStore>()(
+    persist(
+        (set, get) => ({
+            ...INITIAL_STATE,
 
-    addPlayer: (name) =>
-        set((state) => ({
-            players: [
-                ...state.players,
-                {
-                    id: Date.now().toString() + Math.random().toString(), // Simple ID generation
-                    name,
-                    pushUsageCount: { front9: 0, back9: 0 },
-                },
-            ],
-        })),
+            // ── プレイヤー追加 ───────────────────────────────────────
+            addPlayer: (name) =>
+                set((state) => ({
+                    players: [
+                        ...state.players,
+                        {
+                            id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                            name,
+                            pushUsageCount: { front9: 0, back9: 0 },
+                        },
+                    ],
+                })),
 
-    setLanguage: (lang) => {
-        i18n.changeLanguage(lang);
-        set((state) => ({
-            settings: { ...state.settings, language: lang },
-        }));
-    },
+            // ── 言語設定 ─────────────────────────────────────────────
+            setLanguage: (lang) => {
+                i18n.changeLanguage(lang);
+                set((state) => ({
+                    settings: { ...state.settings, language: lang },
+                }));
+            },
 
-    completeHole: ({ par, scores, teamA_Ids, teamB_Ids, holeNumber }) => {
-        const { players, history, settings, nextHoleMultiplier } = get();
+            // ── ホール確定 ───────────────────────────────────────────
+            completeHole: ({ par, scores, teamA_Ids, teamB_Ids, holeNumber }) => {
+                const state = get();
+                const { players, history, settings, nextHoleMultiplier, pushUsed, pushBonus } = state;
+                const pushLimit = settings.maxPushCountPerHalf;
 
-        // --- 1. Auto Use Push Logic (Hole 9 & 18) ---
-        let finalScores = { ...scores };
-        let pushedPlayers = [...players];
-
-        if (holeNumber === 9 || holeNumber === 18) {
-            const maxPush = settings.maxPushCountPerHalf;
-            // Force use ANY remaining push count
-            pushedPlayers = players.map(p => {
-                const usedInHalf = (holeNumber === 9) ? p.pushUsageCount.front9 : p.pushUsageCount.back9;
-                const remaining = Math.max(0, maxPush - usedInHalf);
-
-                if (remaining > 0) {
-                    finalScores[p.id] = {
-                        ...finalScores[p.id],
-                        pushCount: remaining // Force usage of all remaining
+                // 3人モード: ボギーくんのスコアを par+1 で自動設定
+                const effectiveScores = { ...scores };
+                if (settings.playerCount === 3) {
+                    effectiveScores[BOGEY_KUN_ID] = {
+                        score: par + 1,
+                        isBirdie: false,
+                        isEagle: false,
+                        pushCount: 0,
                     };
                 }
-                return p;
-            });
-        }
 
-        // --- 2. Calculate Result ---
-        const result = calculateHoleResult({
-            holeNumber,
-            par,
-            scores: finalScores,
-            teamA_Ids,
-            teamB_Ids,
-            currentCarryOverMultiplier: nextHoleMultiplier,
-        });
+                // --- 1. ホール計算 ---
+                const currentCarryOverLevel = nextHoleMultiplier === 1
+                    ? 0
+                    : nextHoleMultiplier / 2;
 
-        // --- 3. Update Push Usage Counts ---
-        // We use 'finalScores' because it contains auto-used pushes
-        const updatedPlayers = pushedPlayers.map(p => {
-            const usedCount = finalScores[p.id]?.pushCount || 0;
-            if (usedCount > 0) {
-                const isFront9 = holeNumber <= 9;
-                return {
-                    ...p,
-                    pushUsageCount: {
-                        ...p.pushUsageCount,
-                        front9: isFront9 ? p.pushUsageCount.front9 + usedCount : p.pushUsageCount.front9,
-                        back9: !isFront9 ? p.pushUsageCount.back9 + usedCount : p.pushUsageCount.back9,
-                    }
-                };
-            }
-            return p;
-        });
-
-        const newHoleResult: HoleResult = result;
-
-        // Check if updating existing history
-        const existingIndex = history.findIndex(h => h.holeNumber === holeNumber);
-        let newHistory = [...history];
-
-        if (existingIndex !== -1) {
-            newHistory[existingIndex] = newHoleResult;
-        } else {
-            newHistory.push(newHoleResult);
-            newHistory.sort((a, b) => a.holeNumber - b.holeNumber);
-        }
-
-        // --- 4. Game End Check ---
-        let nextHole = holeNumber + 1;
-        let nextStatus: 'playing' | 'finished' = 'playing';
-
-        if (holeNumber === 18) {
-            nextStatus = 'finished';
-            nextHole = 18; // Stay on 18 if finished
-        }
-
-        set({
-            history: newHistory,
-            players: updatedPlayers,
-            currentHole: nextHole,
-            gameStatus: nextStatus,
-            nextHoleMultiplier: result.nextHoleMultiplier
-        });
-    },
-
-    resetGame: () => set({ ...INITIAL_STATE, players: [] }), // Or keep players? Usually reset clears everything or just game state. Let's clear for now.
-
-    updatePlayerName: (id, name) =>
-        set((state) => ({
-            players: state.players.map((p) => (p.id === id ? { ...p, name } : p)),
-        })),
-
-    getRecommendedPairs: (holeNumber) => {
-        const state = get();
-        const { players, history } = state;
-
-        if (players.length < 4) {
-            // Fallback if not enough players
-            return { teamA: ['1', '2'], teamB: ['3', '4'] };
-        }
-
-        // 1. Determine Honor Order
-        let rankedPlayers = [...players];
-        if (holeNumber > 1 && history.length > 0) {
-            // Look at previous hole (history[history.length - 1] might not matches holeNumber-1 if we skipped, 
-            // but let's assume history is sequential for now or find exact previous hole)
-            // Ideally: find result for holeNumber - 1
-            const lastHole = history.find(h => h.holeNumber === holeNumber - 1);
-
-            if (lastHole) {
-                // Sort by score low to high.
-                // If tie, keep previous order (stable sort).
-                // Actually JS sort is stable in modern engines, but to be safe we relies on index if scores equal?
-                // For simplified "Honor" in golf: strictly score based.
-                rankedPlayers.sort((a, b) => {
-                    const scoreA = lastHole.scores[a.id]?.score ?? 999;
-                    const scoreB = lastHole.scores[b.id]?.score ?? 999;
-                    return scoreA - scoreB;
+                const result = calculateHoleResult({
+                    holeNumber,
+                    par,
+                    scores: effectiveScores,
+                    teamA_Ids,
+                    teamB_Ids,
+                    currentCarryOverLevel,
                 });
-            }
-        }
 
-        const p = rankedPlayers; // p[0] is 1st (Honor), p[1] 2nd...
+                // --- 2. 3人モード: ソロプレイヤーのポイントを×2 ---
+                let adjustedPointsResult = { ...result.pointsResult };
+                if (settings.playerCount === 3) {
+                    const soloId = findSoloPlayer(teamA_Ids, teamB_Ids);
+                    if (soloId && soloId !== BOGEY_KUN_ID) {
+                        adjustedPointsResult[soloId] = (adjustedPointsResult[soloId] ?? 0) * 2;
+                    }
+                }
 
-        // 2. Determine Pattern (A, B, C)
-        // Hole 1 -> Pattern A (1%3 == 1)
-        // Hole 2 -> Pattern B (2%3 == 2)
-        // Hole 3 -> Pattern C (3%3 == 0)
-        // Hole 4 -> Pattern A
-        const mod = holeNumber % 3;
+                // 調整済みポイントで HoleResult を上書き
+                const adjustedResult: HoleResult = {
+                    ...result,
+                    pointsResult: adjustedPointsResult,
+                };
 
-        let teamA_Ids: [PlayerId, PlayerId];
-        let teamB_Ids: [PlayerId, PlayerId];
+                // --- 3. 履歴を更新 ---
+                const existingIndex = history.findIndex(h => h.holeNumber === holeNumber);
+                const newHistory = [...history];
+                if (existingIndex !== -1) {
+                    newHistory[existingIndex] = adjustedResult;
+                } else {
+                    newHistory.push(adjustedResult);
+                    newHistory.sort((a, b) => a.holeNumber - b.holeNumber);
+                }
 
-        if (mod === 1) {
-            // Pattern A: 1&2 vs 3&4
-            teamA_Ids = [p[0].id, p[1].id];
-            teamB_Ids = [p[2].id, p[3].id];
-        } else if (mod === 2) {
-            // Pattern B: 1&3 vs 2&4
-            teamA_Ids = [p[0].id, p[2].id];
-            teamB_Ids = [p[1].id, p[3].id];
-        } else {
-            // Pattern C (mod 0): 1&4 vs 2&3
-            teamA_Ids = [p[0].id, p[3].id];
-            teamB_Ids = [p[1].id, p[2].id];
-        }
+                // --- 4. プッシュカウント更新 ---
+                const isFront9 = holeNumber <= 9;
+                const updatedPlayers = players.map(p => {
+                    const usedCount = effectiveScores[p.id]?.pushCount ?? 0;
+                    if (usedCount <= 0) return p;
+                    return {
+                        ...p,
+                        pushUsageCount: {
+                            front9: isFront9
+                                ? p.pushUsageCount.front9 + usedCount
+                                : p.pushUsageCount.front9,
+                            back9: !isFront9
+                                ? p.pushUsageCount.back9 + usedCount
+                                : p.pushUsageCount.back9,
+                        },
+                    };
+                });
 
-        return { teamA: teamA_Ids, teamB: teamB_Ids };
-    },
+                // --- 5. pushUsed を更新 ---
+                const newPushUsed = { ...pushUsed };
+                for (const id of [...teamA_Ids, ...teamB_Ids]) {
+                    const used = effectiveScores[id]?.pushCount ?? 0;
+                    newPushUsed[id] = (newPushUsed[id] ?? 0) + used;
+                }
 
-    getPlayerTotalScore: (id) => {
-        const { history } = get();
-        return history.reduce((total, h) => {
-            const points = h.pointsResult[id] || 0;
-            return total + points;
-        }, 0);
-    },
+                // --- 6. ハーフ切り替え（9→10）でプッシュリセット ---
+                const crossingHalfBoundary = holeNumber === 9;
+                const newPushUsedAfterReset = crossingHalfBoundary
+                    ? Object.fromEntries(Object.keys(newPushUsed).map(id => [id, 0]))
+                    : newPushUsed;
+                const newPushBonusAfterReset = crossingHalfBoundary
+                    ? Object.fromEntries(Object.keys(pushBonus).map(id => [id, 0]))
+                    : { ...pushBonus };
 
-    goToHole: (holeNumber) => {
-        set({ currentHole: holeNumber });
-    },
+                // --- 7. バーディー復活ボーナス付与 ---
+                const newPushBonus = { ...newPushBonusAfterReset };
+                if (settings.birdyPushRecovery) {
+                    for (const id of [...teamA_Ids, ...teamB_Ids]) {
+                        // ボギーくんはボーナス対象外
+                        if (id === BOGEY_KUN_ID) continue;
+                        const s = effectiveScores[id];
+                        if (s && (s.isBirdie || s.isEagle)) {
+                            newPushBonus[id] = (newPushBonus[id] ?? 0) + 1;
+                        }
+                    }
+                }
 
-    startGame: (startHole) => {
-        const currentPlayers = get().players;
-        const currentSettings = get().settings;
-        const currentSavedRounds = get().savedRounds; // Persist history across resets!
+                // --- 8. 次ホールのランク付け ---
+                const realPlayerIds = updatedPlayers
+                    .filter(p => p.type !== 'bogey_kun')
+                    .map(p => p.id);
+                const currentRanking = state.playerRanking.filter(id => realPlayerIds.includes(id));
+                const nextRanking = computeNextRanking(realPlayerIds, newHistory, currentRanking);
 
-        set({
-            ...INITIAL_STATE,
-            // Restore persistent state
-            savedRounds: currentSavedRounds,
-            players: currentPlayers.map(p => ({
-                ...p,
-                pushUsageCount: { front9: 0, back9: 0 }
-            })),
-            settings: {
-                ...INITIAL_STATE.settings,
-                ...currentSettings, // Keep settings? Or reset? Usually keep.
-                // Reset match name? Maybe. Let's keep for now or reset in UI.
+                // 3人モード: bogey_kun を末尾に追加
+                const fullRanking = settings.playerCount === 3
+                    ? [...nextRanking, BOGEY_KUN_ID]
+                    : nextRanking;
+
+                // --- 9. ゲーム終了判定 ---
+                const isGameOver = holeNumber === 18;
+                const nextHole = isGameOver ? 18 : holeNumber + 1;
+                const nextStatus: GameState['gameStatus'] = isGameOver ? 'finished' : 'playing';
+
+                set({
+                    history: newHistory,
+                    players: updatedPlayers,
+                    currentHole: nextHole,
+                    gameStatus: nextStatus,
+                    nextHoleMultiplier: result.nextHoleMultiplier,
+                    playerRanking: fullRanking,
+                    pushUsed: newPushUsedAfterReset,
+                    pushBonus: newPushBonus,
+                });
             },
-            currentHole: startHole,
-            gameStatus: 'playing',
-        });
-    },
 
-    updateSettings: (newSettings) => {
-        set((state) => ({
-            settings: { ...state.settings, ...newSettings }
-        }));
-    },
+            // ── ゲームリセット ───────────────────────────────────────
+            resetGame: () => {
+                const { savedRounds } = get();
+                // AsyncStorage からゲーム状態を削除（履歴は別キーで保持）
+                AsyncStorage.removeItem('golf-lasvegas-game').catch(() => {/* 無視 */});
+                set({
+                    ...INITIAL_STATE,
+                    savedRounds,
+                    players: DEFAULT_PLAYERS.map(p => ({
+                        ...p,
+                        pushUsageCount: { front9: 0, back9: 0 },
+                    })),
+                });
+            },
 
-    saveCurrentRound: () => {
-        const { history, players, settings, savedRounds, getPlayerTotalScore } = get();
-        if (history.length === 0) return;
+            // ── プレイヤー名更新 ─────────────────────────────────────
+            updatePlayerName: (id, name) =>
+                set((state) => ({
+                    players: state.players.map((p) => (p.id === id ? { ...p, name } : p)),
+                })),
 
-        const finalScores: Record<PlayerId, number> = {};
-        players.forEach(p => finalScores[p.id] = getPlayerTotalScore(p.id));
+            // ── 推奨チームペア取得 ────────────────────────────────────
+            getRecommendedPairs: (holeNumber) => {
+                const { players, playerRanking, settings } = get();
 
-        const newRound: RoundResult = {
-            id: Date.now().toString(), // Simple ID
-            date: new Date().toISOString(),
-            name: settings.matchName || 'Untitled Match',
-            players: players,
-            history: history,
-            finalScores: finalScores,
-            gameStatus: 'finished', // Assume saving implies finished or snapshot
-            currentHole: get().currentHole
-        };
+                // 実プレイヤーのみでランキング構築
+                const realPlayers = players.filter(p => p.type !== 'bogey_kun');
+                if (realPlayers.length < 3) {
+                    // フォールバック（プレイヤー不足時）
+                    const ids = realPlayers.map(p => p.id);
+                    return {
+                        teamA: [ids[0] ?? 'p1', ids[1] ?? 'p2'],
+                        teamB: [ids[2] ?? 'p3', ids[3] ?? 'p4'],
+                    };
+                }
 
-        set({ savedRounds: [newRound, ...savedRounds] });
-    }
-}));
+                // playerRanking が設定済みなら使用、なければ players 順
+                const realPlayerIds = realPlayers.map(p => p.id);
+                const validRanking = playerRanking.filter(id => realPlayerIds.includes(id));
+                const baseRanking = validRanking.length === realPlayerIds.length
+                    ? validRanking
+                    : realPlayerIds;
+
+                // 3人モード: bogey_kun を末尾に追加してランキングを4人分に
+                const fullRanking: PlayerId[] = settings.playerCount === 3
+                    ? [...baseRanking, BOGEY_KUN_ID]
+                    : baseRanking;
+
+                if (fullRanking.length < 4) {
+                    return {
+                        teamA: [fullRanking[0] ?? 'p1', fullRanking[1] ?? 'p2'],
+                        teamB: [fullRanking[2] ?? 'p3', fullRanking[3] ?? 'p4'],
+                    };
+                }
+
+                return computeTeamPairs(holeNumber, fullRanking);
+            },
+
+            // ── 累計スコア取得 ───────────────────────────────────────
+            getPlayerTotalScore: (id) => {
+                const { history } = get();
+                return history.reduce((total, h) => total + (h.pointsResult[id] ?? 0), 0);
+            },
+
+            // ── プッシュ残り回数取得 ─────────────────────────────────
+            getRemainingPushForPlayer: (id) => {
+                if (id === BOGEY_KUN_ID) return 0;
+                const { settings, pushUsed, pushBonus } = get();
+                return getRemainingPush(id, settings.maxPushCountPerHalf, pushUsed, pushBonus);
+            },
+
+            // ── ホール移動 ───────────────────────────────────────────
+            goToHole: (holeNumber) => {
+                set({ currentHole: holeNumber });
+            },
+
+            // ── ゲーム開始 ───────────────────────────────────────────
+            startGame: (startHole) => {
+                const { players: currentPlayers, settings: currentSettings, savedRounds } = get();
+
+                // 実プレイヤーのみ（bogey_kun は startGame 時は含めない）
+                const realPlayers = currentPlayers
+                    .filter(p => p.type !== 'bogey_kun')
+                    .map(p => ({ ...p, pushUsageCount: { front9: 0, back9: 0 } }));
+
+                // 3人モード時: bogey_kun を追加
+                const gamePlayers: Player[] = currentSettings.playerCount === 3
+                    ? [...realPlayers, { ...BOGEY_KUN_PLAYER }]
+                    : realPlayers;
+
+                const initialPushUsed: Record<PlayerId, number> = {};
+                const initialPushBonus: Record<PlayerId, number> = {};
+                for (const p of gamePlayers) {
+                    initialPushUsed[p.id] = 0;
+                    initialPushBonus[p.id] = 0;
+                }
+
+                set({
+                    ...INITIAL_STATE,
+                    savedRounds,
+                    players: gamePlayers,
+                    settings: {
+                        ...INITIAL_STATE.settings,
+                        ...currentSettings,
+                    },
+                    currentHole: startHole,
+                    gameStatus: 'playing',
+                    playerRanking: [],
+                    pushUsed: initialPushUsed,
+                    pushBonus: initialPushBonus,
+                });
+            },
+
+            // ── 設定更新 ─────────────────────────────────────────────
+            updateSettings: (newSettings) => {
+                set((state) => ({
+                    settings: { ...state.settings, ...newSettings },
+                }));
+            },
+
+            // ── ラウンド保存 ─────────────────────────────────────────
+            saveCurrentRound: () => {
+                const { history, players, settings, savedRounds, getPlayerTotalScore } = get();
+                if (history.length === 0) return;
+
+                const finalScores: Record<PlayerId, number> = {};
+                players.forEach(p => {
+                    finalScores[p.id] = getPlayerTotalScore(p.id);
+                });
+
+                const newRound: RoundResult = {
+                    id: Date.now().toString(),
+                    date: new Date().toISOString(),
+                    name: settings.matchName || 'Untitled Match',
+                    players,
+                    history,
+                    finalScores,
+                    gameStatus: 'finished',
+                    currentHole: get().currentHole,
+                };
+
+                set({ savedRounds: [newRound, ...savedRounds] });
+            },
+
+            // ── ラウンド再開 ─────────────────────────────────────────
+            resumeRound: (roundId) => {
+                const { savedRounds } = get();
+                const round = savedRounds.find(r => r.id === roundId);
+                if (!round) return;
+
+                const sortedHistory = [...round.history].sort((a, b) => a.holeNumber - b.holeNumber);
+                const lastResult = sortedHistory[sortedHistory.length - 1];
+
+                // プッシュ状態を再構築（再開時は使用済み回数を履歴から再計算）
+                const initialPushUsed: Record<PlayerId, number> = {};
+                const initialPushBonus: Record<PlayerId, number> = {};
+                for (const p of round.players) {
+                    initialPushUsed[p.id] = 0;
+                    initialPushBonus[p.id] = 0;
+                }
+
+                set({
+                    players: round.players,
+                    history: round.history,
+                    currentHole: round.currentHole,
+                    gameStatus: 'playing',
+                    nextHoleMultiplier: lastResult?.nextHoleMultiplier ?? 1,
+                    settings: {
+                        ...get().settings,
+                        matchName: round.name,
+                    },
+                    playerRanking: [],
+                    pushUsed: initialPushUsed,
+                    pushBonus: initialPushBonus,
+                });
+            },
+        }),
+        {
+            name: 'golf-lasvegas-game',
+            storage: createJSONStorage(() => AsyncStorage),
+            partialize: (state) => ({
+                players: state.players,
+                currentHole: state.currentHole,
+                history: state.history,
+                gameStatus: state.gameStatus,
+                settings: state.settings,
+                savedRounds: state.savedRounds,
+                nextHoleMultiplier: state.nextHoleMultiplier,
+                playerRanking: state.playerRanking,
+                pushUsed: state.pushUsed,
+                pushBonus: state.pushBonus,
+            }),
+            // 破損データのフォールバック
+            onRehydrateStorage: () => (state, error) => {
+                if (error) {
+                    // 破損データは無視して初期状態を使用
+                }
+                if (state) {
+                    // 後方互換: 新フィールドが存在しない古いデータのマイグレーション
+                    if (!state.playerRanking) state.playerRanking = [];
+                    if (!state.pushUsed) state.pushUsed = {};
+                    if (!state.pushBonus) state.pushBonus = {};
+                    if (state.settings && !('playerCount' in state.settings)) {
+                        (state.settings as GameState['settings']).playerCount = 4;
+                    }
+                    if (state.settings && !('birdyPushRecovery' in state.settings)) {
+                        (state.settings as GameState['settings']).birdyPushRecovery = false;
+                    }
+                }
+            },
+        },
+    ),
+);
+
+// ─── ユーティリティエクスポート ────────────────────────────────────
+export { BOGEY_KUN_ID, BOGEY_KUN_PLAYER, computeTeamPairs, findSoloPlayer, getRemainingPush };
