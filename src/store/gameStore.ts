@@ -418,7 +418,10 @@ export const useGameStore = create<GameStore>()(
 
             // ── ホール移動 ───────────────────────────────────────────
             goToHole: (holeNumber) => {
-                set({ currentHole: holeNumber });
+                const { history } = get();
+                const prevResult = history.find(h => h.holeNumber === holeNumber - 1);
+                const restoredMultiplier = prevResult ? prevResult.nextHoleMultiplier : 1;
+                set({ currentHole: holeNumber, nextHoleMultiplier: restoredMultiplier });
             },
 
             // ── ゲーム開始 ───────────────────────────────────────────
