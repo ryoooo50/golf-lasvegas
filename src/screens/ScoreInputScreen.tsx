@@ -1,450 +1,447 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { Button, Chip, DataTable, Dialog, IconButton, Portal, RadioButton, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Button, Dialog, Portal, Text, TextInput } from 'react-native-paper';
+import { HoleHeader } from '../components/score-input/HoleHeader';
+import { LivePreviewPanel } from '../components/score-input/LivePreviewPanel';
+import { ParSelectDialog } from '../components/score-input/ParSelectDialog';
+import { PlayerScoreCard } from '../components/score-input/PlayerScoreCard';
+import { ResultSummaryDialog } from '../components/score-input/ResultSummaryDialog';
+import { HistoryDialog } from '../components/shared/HistoryDialog';
+import { ScorecardDialog } from '../components/shared/ScorecardDialog';
+import { C } from '../theme/colors';
 import { useGameStore } from '../store/gameStore';
-import { PlayerId, ScoreInput } from '../types';
-
-// Colors
-const COLOR_TEAM_A_BG = '#E3F2FD';
-const COLOR_TEAM_A_TEXT = '#0D47A1';
-const COLOR_TEAM_B_BG = '#FCE4EC';
-const COLOR_TEAM_B_TEXT = '#880E4F';
-const COLOR_TEXT_PRIMARY = '#212121';
-const COLOR_INPUT_BG = '#F5F5F5';
-const COLOR_BORDER = '#E0E0E0';
-const COLOR_PRIMARY_ACTION = '#2196F3';
+import { useAuthStore } from '../store/authStore';
+import { CalculationBreakdown, PlayerId, ScoreInput } from '../types';
+import { calculateLivePreview } from '../utils/golfLogic';
 
 export const ScoreInputScreen = () => {
-    const theme = useTheme();
     const {
         players, currentHole, nextHoleMultiplier, completeHole, settings,
         setLanguage, getRecommendedPairs, getPlayerTotalScore, updatePlayerName,
-        goToHole, history, startGame, updateSettings, saveCurrentRound, savedRounds
+        getRemainingPushForPlayer, goToHole, history, updateSettings, saveCurrentRound, savedRounds, resumeRound,
     } = useGameStore();
+    const deleteSavedRound = useGameStore((state) => state.deleteSavedRound);
+    const { signOut, user } = useAuthStore();
     const { t } = useTranslation();
-    const { width } = useWindowDimensions();
     const bgScrollRef = useRef<ScrollView>(null);
 
-    // Local state
     const [par, setPar] = useState<number | null>(null);
-    const [scores, setScores] = useState<Record<PlayerId, number>>({});
-    const [pushes, setPushes] = useState<Record<PlayerId, boolean>>({});
+    const [scores, setScores] = useState<Record<PlayerId, number | undefined>>({});
+    const [birdieFlags, setBirdieFlags] = useState<Record<PlayerId, boolean>>({});
+    const [pushCounts, setPushCounts] = useState<Record<PlayerId, number>>({});
     const [teamAssignments, setTeamAssignments] = useState<Record<PlayerId, 'A' | 'B'>>({});
 
-    // Dialogs
+    const [isParDialogVisible, setIsParDialogVisible] = useState(false);
     const [isNameDialogVisible, setIsNameDialogVisible] = useState(false);
     const [editingPlayerId, setEditingPlayerId] = useState<PlayerId | null>(null);
     const [editingName, setEditingName] = useState('');
-
     const [isHelpVisible, setIsHelpVisible] = useState(false);
-
-    // Setup / Settings
-    const [isSetupVisible, setIsSetupVisible] = useState(history.length === 0 && currentHole === 1);
     const [isSettingsVisible, setIsSettingsVisible] = useState(false);
+    const [isScorecardVisible, setIsScorecardVisible] = useState(false);
+    const [isHistoryVisible, setIsHistoryVisible] = useState(false);
+    const [resultBreakdown, setResultBreakdown] = useState<CalculationBreakdown | null>(null);
+    const [isResultVisible, setIsResultVisible] = useState(false);
 
-    // Par Selection Dialog
-    // Show if par is null AND we are not in setup mode
-    const [isParDialogVisible, setIsParDialogVisible] = useState(false);
-
-    useEffect(() => {
-        if (!isSetupVisible && par === null) {
-            setIsParDialogVisible(true);
-        }
-    }, [isSetupVisible, par]);
-
-    // Setup Fields
-    const [startCourse, setStartCourse] = useState<'OUT' | 'IN'>('OUT');
-    const [matchName, setMatchName] = useState('');
     const [editRate, setEditRate] = useState(settings.rate.toString());
     const [editPushLimit, setEditPushLimit] = useState(settings.maxPushCountPerHalf.toString());
 
-    // Scorecard / History
-    const [isScorecardVisible, setIsScorecardVisible] = useState(false);
-    const [isHistoryVisible, setIsHistoryVisible] = useState(false);
-
-
-    // Initialize/Hydrate
     useEffect(() => {
-        // Scroll to Top on Hole Change
-        if (bgScrollRef.current) {
-            bgScrollRef.current.scrollTo({ y: 0, animated: true });
-        }
-
+        bgScrollRef.current?.scrollTo({ y: 0, animated: true });
         const savedHole = history.find(h => h.holeNumber === currentHole);
 
         if (savedHole) {
             setPar(savedHole.par);
-            const savedScores: Record<PlayerId, number> = {};
-            const savedPushes: Record<PlayerId, boolean> = {};
+            const savedScores: Record<PlayerId, number | undefined> = {};
+            const savedBirdie: Record<PlayerId, boolean> = {};
+            const savedPush: Record<PlayerId, number> = {};
             const savedAssignments: Record<PlayerId, 'A' | 'B'> = {};
 
             Object.entries(savedHole.scores).forEach(([pid, val]) => {
                 savedScores[pid] = val.score;
-                savedPushes[pid] = val.usePush;
+                savedBirdie[pid] = val.isBirdie;
+                savedPush[pid] = val.pushCount || 0;
             });
-
-            savedHole.teamA_Ids.forEach(id => savedAssignments[id] = 'A');
-            savedHole.teamB_Ids.forEach(id => savedAssignments[id] = 'B');
+            savedHole.teamA_Ids.forEach(id => { savedAssignments[id] = 'A'; });
+            savedHole.teamB_Ids.forEach(id => { savedAssignments[id] = 'B'; });
 
             setScores(savedScores);
-            setPushes(savedPushes);
+            setBirdieFlags(savedBirdie);
+            setPushCounts(savedPush);
             setTeamAssignments(savedAssignments);
         } else {
-            setPar(null); // Force selection
+            setPar(null);
             setScores({});
-            setPushes({});
-
+            setBirdieFlags({});
+            setPushCounts({});
             const { teamA, teamB } = getRecommendedPairs(currentHole);
             const newAssignments: Record<PlayerId, 'A' | 'B'> = {};
-            teamA.forEach(id => newAssignments[id] = 'A');
-            teamB.forEach(id => newAssignments[id] = 'B');
+            teamA.forEach(id => { newAssignments[id] = 'A'; });
+            teamB.forEach(id => { newAssignments[id] = 'B'; });
             setTeamAssignments(newAssignments);
         }
 
-        // Sync settings to edit state when opened
-        setMatchName(settings.matchName);
         setEditRate(settings.rate.toString());
         setEditPushLimit(settings.maxPushCountPerHalf.toString());
+    }, [currentHole, history, getRecommendedPairs, settings.maxPushCountPerHalf, settings.rate]);
 
-    }, [currentHole, history, getRecommendedPairs, settings]);
+    useEffect(() => {
+        if (par === null) setIsParDialogVisible(true);
+    }, [currentHole, par]);
 
-    const handleStartGame = () => {
-        // Validate
-        const rate = parseInt(editRate, 10) || 10;
-        const pushLimit = parseInt(editPushLimit, 10) || 2;
-
-        updateSettings({ matchName, rate, maxPushCountPerHalf: pushLimit });
-
-        setIsSetupVisible(false);
-        const startHole = startCourse === 'OUT' ? 1 : 10;
-        startGame(startHole);
-    };
-
-    const handleUpdateSettingsMIDGAME = () => {
-        const rate = parseInt(editRate, 10) || settings.rate;
-        const pushLimit = parseInt(editPushLimit, 10) || settings.maxPushCountPerHalf;
-        updateSettings({ matchName, rate, maxPushCountPerHalf: pushLimit });
-        setIsSettingsVisible(false);
-    };
-
-    const confirmRestart = () => {
-        Alert.alert(
-            t('common.restart'),
-            t('common.confirmReset'),
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'OK', onPress: () => setIsSetupVisible(true) }
-            ]
-        );
-    };
-
-    const handleSaveGame = () => {
-        saveCurrentRound();
-        Alert.alert(t('common.roundSaved'), '', [{ text: 'OK', onPress: () => setIsHistoryVisible(true) }]);
-    };
-
-    const handleScoreChange = (id: PlayerId, text: string) => {
-        // Allow empty string to clear the field
-        if (text === '') {
-            const newScores = { ...scores };
-            delete newScores[id]; // Removes key, making value undefined
-            setScores(newScores);
-            return;
-        }
-
-        const val = parseInt(text, 10);
-        // Only update if it's a valid number
-        if (!isNaN(val)) {
-            setScores(prev => ({ ...prev, [id]: val }));
-        }
-    };
-
-    const togglePush = (id: PlayerId) => {
-        setPushes(prev => ({ ...prev, [id]: !prev[id] }));
-    };
-
-    const toggleTeam = (id: PlayerId, val: 'A' | 'B') => {
-        setTeamAssignments(prev => ({ ...prev, [id]: val }));
-    };
-
-    const openNameEditor = (id: PlayerId, currentName: string) => {
-        setEditingPlayerId(id);
-        setEditingName(currentName);
-        setIsNameDialogVisible(true);
-    };
-
-    const saveName = () => {
-        if (editingPlayerId && editingName.trim()) {
-            updatePlayerName(editingPlayerId, editingName.trim());
-        }
-        setIsNameDialogVisible(false);
-        setEditingPlayerId(null);
-    };
-
-    // Navigation
-    const handlePrevHole = () => {
-        if (currentHole > 1) {
-            goToHole(currentHole - 1);
-        }
-    };
-
-    const handleNextHoleNav = () => {
-        goToHole(currentHole + 1);
-    };
-
-    // Validation
     const isFront9 = currentHole <= 9;
     const teamA = players.filter(p => teamAssignments[p.id] === 'A');
     const teamB = players.filter(p => teamAssignments[p.id] === 'B');
     const isValidTeams = teamA.length === 2 && teamB.length === 2;
-    const isScoresEntered = players.every(p => scores[p.id] !== undefined && scores[p.id] > 0);
+    const isScoresEntered = players.every(p => scores[p.id] !== undefined && (scores[p.id] ?? 0) > 0);
     const canSubmit = isValidTeams && isScoresEntered && par !== null;
+    const isEditingExisting = history.some(h => h.holeNumber === currentHole);
+
+    const livePreview = useMemo(() => {
+        const currentCOLevel = nextHoleMultiplier === 1 ? 0 : nextHoleMultiplier / 2;
+        const coMultFb = currentCOLevel * 2;
+        if (!isValidTeams || par === null || teamA.length < 2 || teamB.length < 2) {
+            return { isComplete: false, teamAFinalScore: 0, teamBFinalScore: 0, teamAFlipped: false, teamBFlipped: false, winnerTeam: null, diff: 0, pushMultiplier: 0, carryOverMultiplier: coMultFb, eagleMultiplier: 0, finalMultiplier: Math.max(1, coMultFb), estimatedPoints: 0 } as ReturnType<typeof calculateLivePreview>;
+        }
+        const previewScores: Record<PlayerId, Partial<ScoreInput>> = {};
+        players.forEach(p => {
+            const s = scores[p.id];
+            const isEagle = par !== null && s !== undefined && s <= par - 2;
+            const isBirdie = isEagle || (birdieFlags[p.id] ?? false) || (par !== null && s !== undefined && s === par - 1);
+            previewScores[p.id] = {
+                score: s,
+                isBirdie,
+                isEagle,
+                pushCount: pushCounts[p.id] || 0,
+            };
+        });
+        return calculateLivePreview(
+            currentCOLevel,
+            previewScores,
+            [teamA[0].id, teamA[1].id],
+            [teamB[0].id, teamB[1].id],
+            par,
+        );
+    }, [scores, birdieFlags, pushCounts, par, nextHoleMultiplier, teamA, teamB, players, isValidTeams]);
+
+    const liveMultiplier = livePreview.finalMultiplier;
+
+    const handleScoreChange = (id: PlayerId, value: number | undefined) => {
+        setScores(prev => ({ ...prev, [id]: value }));
+    };
+
+    const handleBirdieToggle = (id: PlayerId, value: boolean) => {
+        setBirdieFlags(prev => ({ ...prev, [id]: value }));
+    };
+
+    const cyclePush = (id: PlayerId) => {
+        const player = players.find(p => p.id === id);
+        if (!player) return;
+        const current = pushCounts[id] || 0;
+        const available = Math.max(0, getRemainingPushForPlayer(id) + current);
+        if (available === 0) return;
+        const next = current + 1 > available ? 0 : current + 1;
+        setPushCounts(prev => ({ ...prev, [id]: next }));
+    };
+
+    const getInputWarning = (scoreInputs: Record<PlayerId, ScoreInput>): string | null => {
+        const assignedIds = [...teamA.map(p => p.id), ...teamB.map(p => p.id)];
+        if (new Set(assignedIds).size !== assignedIds.length) {
+            return t('common.duplicateTeamAssignment');
+        }
+
+        const overCapPlayers = players
+            .filter(p => (scoreInputs[p.id]?.score ?? 0) > 9 && p.type !== 'bogey_kun')
+            .map(p => p.name);
+        if (overCapPlayers.length > 0) {
+            return t('common.scoreCapWarning', { names: overCapPlayers.join(', ') });
+        }
+
+        const overPushPlayers = players
+            .filter(p => (scoreInputs[p.id]?.pushCount ?? 0) > getRemainingPushForPlayer(p.id) + (pushCounts[p.id] || 0))
+            .map(p => p.name);
+        if (overPushPlayers.length > 0) {
+            return t('common.pushOverLimitWarning', { names: overPushPlayers.join(', ') });
+        }
+
+        return null;
+    };
+
+    const alertSaveResult = (result: Awaited<ReturnType<typeof saveCurrentRound>>) => {
+        if (result.cloudStatus === 'saved') {
+            Alert.alert(t('common.roundSaved'), t('auth.cloudSaved'), [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+        } else if (result.cloudStatus === 'queued') {
+            Alert.alert(t('common.roundSaved'), t('auth.cloudQueued'), [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+        } else {
+            Alert.alert(t('common.roundSaved'), '', [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+        }
+    };
 
     const handleSubmit = () => {
-        if (!canSubmit || par === null) return;
+        if (!canSubmit || par === null || teamA.length < 2 || teamB.length < 2) return;
 
         const scoreInputs: Record<PlayerId, ScoreInput> = {};
         players.forEach(p => {
             const s = scores[p.id] || 0;
+            const isEagle = par !== null && s <= par - 2;
+            const isBirdie = isEagle || (birdieFlags[p.id] ?? false) || (par !== null && s === par - 1);
             scoreInputs[p.id] = {
                 score: s,
-                isBirdie: s < par,
-                usePush: pushes[p.id] || false,
+                isBirdie,
+                isEagle,
+                pushCount: pushCounts[p.id] || 0,
             };
         });
 
-        const teamA_Ids: [PlayerId, PlayerId] = [teamA[0].id, teamA[1].id];
-        const teamB_Ids: [PlayerId, PlayerId] = [teamB[0].id, teamB[1].id];
+        const warning = getInputWarning(scoreInputs);
 
-        completeHole({
-            par,
-            scores: scoreInputs,
-            teamA_Ids,
-            teamB_Ids,
-            holeNumber: currentHole
-        });
+        const doComplete = async (saveAfterComplete = false) => {
+            completeHole({
+                par,
+                scores: scoreInputs,
+                teamA_Ids: [teamA[0].id, teamA[1].id],
+                teamB_Ids: [teamB[0].id, teamB[1].id],
+                holeNumber: currentHole,
+            });
+            const savedResult = useGameStore.getState().history.find(h => h.holeNumber === currentHole);
+            if (savedResult?.breakdown) {
+                setResultBreakdown(savedResult.breakdown);
+                setIsResultVisible(true);
+            }
 
-        Alert.alert(t('common.success'), t('common.holeCompleted'));
+            if (saveAfterComplete) {
+                const result = await useGameStore.getState().saveCurrentRound();
+                alertSaveResult(result);
+            }
+        };
+
+        const proceed = () => {
+            if (currentHole === 18) {
+                Alert.alert(
+                    t('common.finishGame'),
+                    t('common.confirmFinishAndSave'),
+                    [
+                        { text: t('common.cancel'), style: 'cancel' },
+                        { text: t('common.ok'), onPress: () => { void doComplete(true); } },
+                    ],
+                );
+            } else {
+                void doComplete(false);
+            }
+        };
+
+        if (warning) {
+            Alert.alert(
+                t('common.warning'),
+                warning,
+                [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    { text: t('common.ok'), onPress: proceed },
+                ],
+            );
+        } else {
+            proceed();
+        }
     };
 
-    const isEditingExisting = history.some(h => h.holeNumber === currentHole);
+    const handleSaveGame = async () => {
+        const result = await saveCurrentRound();
+        alertSaveResult(result);
+    };
+
+    const handleDeleteRound = (roundId: string) => {
+        Alert.alert(t('common.delete'), t('common.confirmDeleteRound'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+                text: t('common.delete'),
+                style: 'destructive',
+                onPress: async () => {
+                    const result = await deleteSavedRound(roundId);
+                    if (result.cloudStatus === 'queued') {
+                        Alert.alert(t('common.deletedLocalCloudQueued'));
+                    }
+                },
+            },
+        ]);
+    };
+
+    const openNameEditor = (id: PlayerId, name: string) => {
+        setEditingPlayerId(id);
+        setEditingName(name);
+        setIsNameDialogVisible(true);
+    };
+
+    const saveName = () => {
+        if (editingPlayerId && editingName.trim()) updatePlayerName(editingPlayerId, editingName.trim());
+        setIsNameDialogVisible(false);
+    };
 
     return (
         <View style={styles.root}>
-            <StatusBar style="light" backgroundColor="#000000" />
+            <StatusBar style="light" backgroundColor={C.dark} />
 
-            <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeAreaHeader}>
-                <View style={styles.header}>
-                    <View style={styles.headerTopRow}>
-                        <View style={{ flexDirection: 'row', gap: 0 }}>
-                            <IconButton icon="help-circle-outline" iconColor="#ffffff" size={20} onPress={() => setIsHelpVisible(true)} />
-                            <IconButton icon="cog" iconColor="#ffffff" size={20} onPress={() => setIsSettingsVisible(true)} />
-                            <TouchableOpacity onPress={confirmRestart} style={styles.topBtn}>
-                                <Text style={styles.topBtnText}>{t('common.restart').toUpperCase()}</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <TouchableOpacity onPress={() => setIsScorecardVisible(true)} style={[styles.topBtn, { marginRight: 12 }]}>
-                                <Text style={styles.topBtnText}>{t('common.scorecard').toUpperCase()}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setIsHistoryVisible(true)} style={[styles.topBtn, { marginRight: 12 }]}>
-                                <Text style={styles.topBtnText}>{t('common.viewHistory').toUpperCase()}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setLanguage(settings.language === 'en' ? 'ja' : 'en')} style={styles.topBtn}>
-                                <Text style={[styles.topBtnText, { fontWeight: 'bold' }]}>{settings.language.toUpperCase()}</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+            <HoleHeader
+                currentHole={currentHole}
+                par={par}
+                liveMultiplier={liveMultiplier}
+                isFront9={isFront9}
+                canGoPrev={currentHole > 1}
+                canGoNext={isEditingExisting}
+                language={settings.language}
+                history={history}
+                onPrevHole={() => goToHole(currentHole - 1)}
+                onNextHole={() => goToHole(currentHole + 1)}
+                onParPress={() => setIsParDialogVisible(true)}
+                onSettingsPress={() => setIsSettingsVisible(true)}
+                onHelpPress={() => setIsHelpVisible(true)}
+                onRestartPress={() => Alert.alert(t('common.restart'), t('common.confirmReset'), [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    { text: t('common.ok'), onPress: () => { useGameStore.getState().resetGame(); } },
+                ])}
+                onScorecardPress={() => setIsScorecardVisible(true)}
+                onHistoryPress={() => setIsHistoryVisible(true)}
+                onLanguageToggle={() => setLanguage(settings.language === 'en' ? 'ja' : 'en')}
+            />
 
-                    <View style={styles.navRow}>
-                        <IconButton
-                            icon="chevron-left"
-                            iconColor="#ffffff"
-                            size={30}
-                            disabled={currentHole <= 1 && history.length === 0}
-                            onPress={handlePrevHole}
-                        />
-                        <View style={styles.holeInfo}>
-                            <Text variant="headlineSmall" style={styles.headerText}>Hole {currentHole}</Text>
-                            <Text variant="titleSmall" style={styles.headerSubText}>{par ? `Par ${par}` : ''}</Text>
-                        </View>
-                        <IconButton
-                            icon="chevron-right"
-                            iconColor="#ffffff"
-                            size={30}
-                            disabled={!isEditingExisting}
-                            style={{ opacity: isEditingExisting ? 1 : 0 }}
-                            onPress={handleNextHoleNav}
-                        />
-                    </View>
-
-                    <View style={styles.infoBar}>
-                        <Chip icon="flag" mode="outlined" textStyle={{ color: '#ffffff' }} style={styles.chip}>x{nextHoleMultiplier}</Chip>
-                        <Text style={{ color: '#ddd', fontWeight: 'bold' }}>
-                            {isFront9 ? t('common.out') : t('common.in')}
-                        </Text>
-                    </View>
-                </View>
-            </SafeAreaView>
-
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <View style={styles.container}>
                     <ScrollView
                         ref={bgScrollRef}
                         contentContainerStyle={styles.scrollContent}
                         keyboardShouldPersistTaps="handled"
                     >
-
-                        {/* Par Display / Edit */}
-                        <TouchableOpacity onPress={() => setIsParDialogVisible(true)} style={[styles.parRow, !par && styles.parRowHighlight]}>
-                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: par ? '#333' : '#D32F2F', textAlign: 'center' }}>
-                                {par ? `Par ${par}` : `Tap to Select Par`}
-                            </Text>
-                            <Text style={{ fontSize: 12, color: '#666', textAlign: 'center', marginTop: 2 }}>
-                                {t('common.tapToChange')}
-                            </Text>
-                        </TouchableOpacity>
-
-                        <View style={styles.listContainer}>
-                            {players.map(p => {
-                                const currentPushCount = isFront9 ? p.pushUsageCount.front9 : p.pushUsageCount.back9;
-                                const maxPush = settings.maxPushCountPerHalf;
-                                const canPush = currentPushCount < maxPush;
-                                const isPushing = pushes[p.id] || false;
-                                const totalScore = getPlayerTotalScore(p.id);
-
-                                const team = teamAssignments[p.id];
-                                const isTeamA = team === 'A';
-                                const cardBg = isTeamA ? COLOR_TEAM_A_BG : COLOR_TEAM_B_BG;
-                                const cardText = isTeamA ? COLOR_TEAM_A_TEXT : COLOR_TEAM_B_TEXT;
-                                const borderColor = isTeamA ? '#90CAF9' : '#F48FB1';
-
-                                return (
-                                    <View key={p.id} style={[styles.playerCard, { backgroundColor: cardBg, borderColor }]}>
-                                        <TouchableOpacity
-                                            style={styles.nameSection}
-                                            onPress={() => openNameEditor(p.id, p.name)}
-                                        >
-                                            <Text
-                                                style={[styles.playerName, { color: cardText }]}
-                                                numberOfLines={1}
-                                                adjustsFontSizeToFit
-                                            >
-                                                {p.name}
-                                            </Text>
-                                            <View style={styles.totalScoreContainer}>
-                                                <Text style={styles.totalScoreLabel}>Total:</Text>
-                                                <Text style={styles.totalScoreValue}>
-                                                    {totalScore > 0 ? `+${totalScore}` : totalScore}
-                                                </Text>
-                                            </View>
-                                        </TouchableOpacity>
-
-                                        <View style={styles.scoreSection}>
-                                            <TextInput
-                                                mode="outlined"
-                                                value={scores[p.id]?.toString() || ''}
-                                                onChangeText={txt => handleScoreChange(p.id, txt)}
-                                                keyboardType="number-pad"
-                                                style={styles.scoreInput}
-                                                contentStyle={styles.scoreInputContent}
-                                                outlineColor={COLOR_BORDER}
-                                                activeOutlineColor={cardText}
-                                                dense
-                                                disabled={par === null}
-                                            />
-                                        </View>
-
-                                        <View style={styles.controlsSection}>
-                                            <SegmentedButtons
-                                                value={team}
-                                                onValueChange={val => toggleTeam(p.id, val as 'A' | 'B')}
-                                                density="high"
-                                                buttons={[
-                                                    { value: 'A', label: 'A', style: { minWidth: 20 } },
-                                                    { value: 'B', label: 'B', style: { minWidth: 20 } },
-                                                ]}
-                                                style={styles.teamSeg}
-                                            />
-                                            <TouchableOpacity
-                                                onPress={() => togglePush(p.id)}
-                                                disabled={!canPush && !isPushing}
-                                                style={[
-                                                    styles.pushButton,
-                                                    isPushing ? { backgroundColor: cardText } : { borderColor: cardText, borderWidth: 1 }
-                                                ]}
-                                            >
-                                                <Text style={{ fontSize: 10, color: isPushing ? 'white' : cardText }}>
-                                                    {t('common.push')} {currentPushCount}/{maxPush}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                );
-                            })}
+                        {/* Team A セクション */}
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.sectionDot, { backgroundColor: C.greenPrimary }]} />
+                            <Text style={[styles.sectionLabel, { color: C.greenDeep }]}>TEAM A</Text>
+                        </View>
+                        <View style={styles.teamGrid}>
+                            {teamA.map(p => (
+                                <PlayerScoreCard
+                                    key={p.id}
+                                    player={p}
+                                    team="A"
+                                    score={scores[p.id]}
+                                    isBirdie={birdieFlags[p.id] ?? false}
+                                    pushCount={pushCounts[p.id] ?? 0}
+                                    par={par}
+                                    totalScore={getPlayerTotalScore(p.id)}
+                                    remainingPush={getRemainingPushForPlayer(p.id)}
+                                    onScoreChange={handleScoreChange}
+                                    onBirdieToggle={handleBirdieToggle}
+                                    onPushCycle={cyclePush}
+                                    onTeamToggle={(id, val) => setTeamAssignments(prev => ({ ...prev, [id]: val }))}
+                                    onNamePress={openNameEditor}
+                                    onParRequired={() => setIsParDialogVisible(true)}
+                                />
+                            ))}
                         </View>
 
-
+                        {/* Team B セクション */}
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.sectionDot, { backgroundColor: C.coralPrimary }]} />
+                            <Text style={[styles.sectionLabel, { color: C.coralDeep }]}>TEAM B</Text>
+                        </View>
+                        <View style={styles.teamGrid}>
+                            {teamB.map(p => (
+                                <PlayerScoreCard
+                                    key={p.id}
+                                    player={p}
+                                    team="B"
+                                    score={scores[p.id]}
+                                    isBirdie={birdieFlags[p.id] ?? false}
+                                    pushCount={pushCounts[p.id] ?? 0}
+                                    par={par}
+                                    totalScore={getPlayerTotalScore(p.id)}
+                                    remainingPush={getRemainingPushForPlayer(p.id)}
+                                    onScoreChange={handleScoreChange}
+                                    onBirdieToggle={handleBirdieToggle}
+                                    onPushCycle={cyclePush}
+                                    onTeamToggle={(id, val) => setTeamAssignments(prev => ({ ...prev, [id]: val }))}
+                                    onNamePress={openNameEditor}
+                                    onParRequired={() => setIsParDialogVisible(true)}
+                                />
+                            ))}
+                        </View>
 
                         {!isValidTeams && (
-                            <Text style={styles.errorText}>
-                                {t('common.teamAssignmentError')}
-                            </Text>
+                            <Text style={styles.errorText}>{t('common.teamAssignmentError')}</Text>
                         )}
+
+                        <LivePreviewPanel
+                            preview={livePreview}
+                            teamANames={teamA.map(p => p.name).join(' & ')}
+                            teamBNames={teamB.map(p => p.name).join(' & ')}
+                        />
                     </ScrollView>
 
-                    {/* Footer Button - Update or Next & Save */}
-                    <View style={[styles.bottomContainer, { flexDirection: 'row', gap: 10 }]}>
-                        <Button
-                            mode="outlined"
+                    <View style={styles.bottomContainer}>
+                        <TouchableOpacity
                             onPress={handleSaveGame}
-                            contentStyle={{ height: 50 }}
-                            style={{ flex: 1, borderRadius: 8, borderColor: '#aaa' }}
+                            style={styles.saveBtn}
                         >
-                            {t('common.saveGame')}
-                        </Button>
-                        <Button
-                            mode="contained"
+                            <Text style={styles.saveBtnText}>{t('common.saveGame')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
                             onPress={handleSubmit}
-                            contentStyle={{ height: 50 }}
-                            labelStyle={{ fontSize: 16, fontWeight: 'bold', color: '#ffffff' }}
                             disabled={!canSubmit}
-                            buttonColor={COLOR_PRIMARY_ACTION}
-                            style={{ flex: 2, borderRadius: 8 }}
+                            style={[styles.nextBtn, !canSubmit && styles.nextBtnDisabled]}
                         >
-                            {isEditingExisting ? t('common.updateHole') : t('common.nextHole')}
-                        </Button>
+                            <Text style={styles.nextBtnText}>
+                                {isEditingExisting
+                                    ? t('common.updateHole')
+                                    : currentHole === 18
+                                    ? t('common.finish')
+                                    : `${t('common.nextHole')} →`}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
-
                 </View>
             </KeyboardAvoidingView>
 
-            {/* Dialogs */}
+            <ParSelectDialog
+                visible={isParDialogVisible}
+                onSelect={p => { setPar(p); setIsParDialogVisible(false); }}
+            />
+
+            <ScorecardDialog
+                visible={isScorecardVisible}
+                onDismiss={() => setIsScorecardVisible(false)}
+                history={history}
+                players={players}
+                getPlayerTotalScore={getPlayerTotalScore}
+            />
+
+            <HistoryDialog
+                visible={isHistoryVisible}
+                onDismiss={() => setIsHistoryVisible(false)}
+                savedRounds={savedRounds}
+                onResume={(roundId) => resumeRound(roundId)}
+                onDelete={handleDeleteRound}
+            />
+
+            <ResultSummaryDialog
+                visible={isResultVisible}
+                onDismiss={() => setIsResultVisible(false)}
+                breakdown={resultBreakdown}
+                teamAPlayers={teamA}
+                teamBPlayers={teamB}
+                rate={settings.rate}
+            />
+
             <Portal>
-                {/* Name Edit */}
                 <Dialog visible={isNameDialogVisible} onDismiss={() => setIsNameDialogVisible(false)}>
-                    <Dialog.Title>Edit Name</Dialog.Title>
+                    <Dialog.Title>{t('common.editName')}</Dialog.Title>
                     <Dialog.Content>
-                        <TextInput
-                            label="Name"
-                            value={editingName}
-                            onChangeText={setEditingName}
-                            autoFocus
-                        />
+                        <TextInput label={t('common.name')} value={editingName} onChangeText={setEditingName} autoFocus />
                     </Dialog.Content>
                     <Dialog.Actions>
-                        <Button onPress={() => setIsNameDialogVisible(false)}>Cancel</Button>
-                        <Button onPress={saveName}>Save</Button>
+                        <Button onPress={() => setIsNameDialogVisible(false)}>{t('common.cancel')}</Button>
+                        <Button onPress={saveName}>{t('common.save')}</Button>
                     </Dialog.Actions>
                 </Dialog>
 
-                {/* Help */}
                 <Dialog visible={isHelpVisible} onDismiss={() => setIsHelpVisible(false)}>
                     <Dialog.Title>{t('common.helpTitle')}</Dialog.Title>
                     <Dialog.ScrollArea>
@@ -453,308 +450,96 @@ export const ScoreInputScreen = () => {
                         </ScrollView>
                     </Dialog.ScrollArea>
                     <Dialog.Actions>
-                        <Button onPress={() => setIsHelpVisible(false)}>OK</Button>
+                        <Button onPress={() => setIsHelpVisible(false)}>{t('common.ok')}</Button>
                     </Dialog.Actions>
                 </Dialog>
 
-                {/* Setup Modal (Start Match) */}
-                <Dialog visible={isSetupVisible} dismissable={false}>
-                    <Dialog.Title>{t('common.startGame')}</Dialog.Title>
-                    <Dialog.ScrollArea>
-                        <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
-                            <TextInput label={t('common.matchName')} value={matchName} onChangeText={setMatchName} style={styles.inputSpacing} />
-                            <TextInput label={t('common.rate')} value={editRate} onChangeText={setEditRate} keyboardType="numeric" style={styles.inputSpacing} />
-                            <TextInput label={t('common.pushLimit')} value={editPushLimit} onChangeText={setEditPushLimit} keyboardType="numeric" style={styles.inputSpacing} />
-
-                            <Text style={{ marginBottom: 10, marginTop: 10 }}>{t('common.selectStart')}:</Text>
-                            <RadioButton.Group onValueChange={value => setStartCourse(value as 'OUT' | 'IN')} value={startCourse}>
-                                <RadioButton.Item label={t('common.out')} value="OUT" />
-                                <RadioButton.Item label={t('common.in')} value="IN" />
-                            </RadioButton.Group>
-                        </ScrollView>
-                    </Dialog.ScrollArea>
-                    <Dialog.Actions>
-                        <Button onPress={handleStartGame}>{t('common.startGame')}</Button>
-                    </Dialog.Actions>
-                </Dialog>
-
-                {/* Mid-Game Settings Modal */}
                 <Dialog visible={isSettingsVisible} onDismiss={() => setIsSettingsVisible(false)}>
                     <Dialog.Title>{t('common.settings')}</Dialog.Title>
                     <Dialog.Content>
-                        <Text style={{ marginBottom: 10 }}>Match: {settings.matchName}</Text>
-                        <TextInput label={t('common.rate')} value={editRate} onChangeText={setEditRate} keyboardType="numeric" style={styles.inputSpacing} />
-                        <TextInput label={t('common.pushLimit')} value={editPushLimit} onChangeText={setEditPushLimit} keyboardType="numeric" style={styles.inputSpacing} />
+                        <Text style={{ marginBottom: 10 }}>{settings.matchName}</Text>
+                        <TextInput label={t('common.rate')} value={editRate} onChangeText={setEditRate} keyboardType="numeric" style={{ marginBottom: 12 }} />
+                        <TextInput label={t('common.pushLimit')} value={editPushLimit} onChangeText={setEditPushLimit} keyboardType="numeric" />
+                        {user && (
+                            <Button
+                                mode="outlined"
+                                icon="logout"
+                                style={{ marginTop: 16 }}
+                                onPress={() => {
+                                    setIsSettingsVisible(false);
+                                    signOut();
+                                }}
+                            >
+                                {t('auth.logoutButton')}
+                            </Button>
+                        )}
                     </Dialog.Content>
                     <Dialog.Actions>
-                        <Button onPress={() => setIsSettingsVisible(false)}>Cancel</Button>
-                        <Button onPress={handleUpdateSettingsMIDGAME}>Update</Button>
+                        <Button onPress={() => setIsSettingsVisible(false)}>{t('common.cancel')}</Button>
+                        <Button onPress={() => {
+                            updateSettings({ rate: parseInt(editRate, 10) || settings.rate, maxPushCountPerHalf: parseInt(editPushLimit, 10) || settings.maxPushCountPerHalf });
+                            setIsSettingsVisible(false);
+                        }}>{t('common.update')}</Button>
                     </Dialog.Actions>
                 </Dialog>
-
-                {/* Scorecard Modal */}
-                <Dialog visible={isScorecardVisible} onDismiss={() => setIsScorecardVisible(false)} style={{ maxHeight: '80%' }}>
-                    <Dialog.Title>{t('common.scorecard')}</Dialog.Title>
-                    <Dialog.ScrollArea>
-                        <ScrollView horizontal>
-                            <ScrollView>
-                                <DataTable>
-                                    <DataTable.Header>
-                                        <DataTable.Title style={{ width: 50 }}>H</DataTable.Title>
-                                        <DataTable.Title style={{ width: 50 }}>P</DataTable.Title>
-                                        {players.map(p => (
-                                            <DataTable.Title key={p.id} style={{ width: 80 }} numeric>{p.name}</DataTable.Title>
-                                        ))}
-                                    </DataTable.Header>
-
-                                    {history.map((h, i) => (
-                                        <DataTable.Row key={i}>
-                                            <DataTable.Cell style={{ width: 50 }}>{h.holeNumber}</DataTable.Cell>
-                                            <DataTable.Cell style={{ width: 50 }}>{h.par}</DataTable.Cell>
-                                            {players.map(p => (
-                                                <DataTable.Cell key={p.id} style={{ width: 80 }} numeric>
-                                                    {h.scores[p.id]?.score}
-                                                    {h.pointsResult[p.id] !== 0 ? ` (${h.pointsResult[p.id] > 0 ? '+' : ''}${h.pointsResult[p.id]})` : ''}
-                                                </DataTable.Cell>
-                                            ))}
-                                        </DataTable.Row>
-                                    ))}
-
-                                    {/* Total Row */}
-                                    {history.length > 0 && (
-                                        <DataTable.Row>
-                                            <DataTable.Cell style={{ width: 50 }}>Tot</DataTable.Cell>
-                                            <DataTable.Cell style={{ width: 50 }}>{''}</DataTable.Cell>
-                                            {players.map(p => (
-                                                <DataTable.Cell key={p.id} style={{ width: 80 }} numeric>
-                                                    {getPlayerTotalScore(p.id)}
-                                                </DataTable.Cell>
-                                            ))}
-                                        </DataTable.Row>
-                                    )}
-
-                                </DataTable>
-                            </ScrollView>
-                        </ScrollView>
-                    </Dialog.ScrollArea>
-                    <Dialog.Actions>
-                        <Button onPress={() => setIsScorecardVisible(false)}>Close</Button>
-                    </Dialog.Actions>
-                </Dialog>
-
-                {/* History List Modal (Simple version for "View History") */}
-                <Dialog visible={isHistoryVisible} onDismiss={() => setIsHistoryVisible(false)} style={{ maxHeight: '80%' }}>
-                    <Dialog.Title>{t('common.historyTitle')}</Dialog.Title>
-                    <Dialog.ScrollArea>
-                        <ScrollView>
-                            {savedRounds.length === 0 ? (
-                                <Text>{t('common.noHistory')}</Text>
-                            ) : (
-                                savedRounds.map(r => (
-                                    <View key={r.id} style={{ marginBottom: 15, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 8 }}>
-                                        <Text style={{ fontWeight: 'bold' }}>{r.name}</Text>
-                                        <Text style={{ fontSize: 12, color: '#666' }}>{new Date(r.date).toLocaleString()}</Text>
-                                        <Text style={{ marginTop: 4 }}>
-                                            Scores: {r.players.map(p => `${p.name}: ${r.finalScores[p.id] || 0}`).join(', ')}
-                                        </Text>
-                                    </View>
-                                ))
-                            )}
-                        </ScrollView>
-                    </Dialog.ScrollArea>
-                    <Dialog.Actions>
-                        <Button onPress={() => setIsHistoryVisible(false)}>Close</Button>
-                    </Dialog.Actions>
-                </Dialog>
-
-                {/* Par Selection Dialog */}
-                <Dialog visible={isParDialogVisible} dismissable={false}>
-                    <Dialog.Title style={{ textAlign: 'center' }}>{t('common.selectPar') || 'Select Par'}</Dialog.Title>
-                    <Dialog.Content>
-                        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10 }}>
-                            {[3, 4, 5].map(p => (
-                                <Button
-                                    key={p}
-                                    mode="contained"
-                                    onPress={() => { setPar(p); setIsParDialogVisible(false); }}
-                                    style={{ flex: 1, marginHorizontal: 4 }}
-                                    contentStyle={{ height: 60 }}
-                                    labelStyle={{ fontSize: 24, fontWeight: 'bold' }}
-                                >
-                                    {p}
-                                </Button>
-                            ))}
-                        </View>
-                    </Dialog.Content>
-                </Dialog>
-
             </Portal>
-
-        </View >
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-        backgroundColor: '#000000',
-    },
-    safeAreaHeader: {
-        backgroundColor: '#000000',
-    },
-    header: {
-        paddingHorizontal: 16,
-        paddingBottom: 12,
-    },
-    headerTopRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    topBtn: {
-        padding: 4,
-    },
-    topBtnText: {
-        color: '#ccc',
-        fontSize: 12,
-    },
-    navRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginVertical: 4,
-    },
-    holeInfo: {
-        alignItems: 'center',
-    },
-    headerText: {
-        color: '#ffffff',
-        fontWeight: 'bold',
-    },
-    headerSubText: {
-        color: '#cccccc',
-    },
-    infoBar: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 12,
-    },
-    chip: {
-        backgroundColor: '#333',
-        height: 28,
-    },
+    root: { flex: 1, backgroundColor: C.dark },
     container: {
         flex: 1,
-        backgroundColor: '#ffffff',
+        backgroundColor: C.bg,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         overflow: 'hidden',
     },
-    scrollContent: {
-        paddingBottom: 100,
-    },
-    parRow: {
-        padding: 16,
-        paddingBottom: 8,
-        backgroundColor: '#fafafa',
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-    },
-    parRowHighlight: {
-        backgroundColor: '#ffebee',
-    },
-    parSeg: {
-        flex: 1,
-    },
-    parSegPulse: {
-        opacity: 0.8
-    },
-    listContainer: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-    },
-    playerCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        marginBottom: 10,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
-    nameSection: {
-        flex: 1,
-        marginRight: 8,
-        justifyContent: 'center',
-    },
-    playerName: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        marginBottom: 4,
-    },
-    totalScoreContainer: {
-        backgroundColor: 'rgba(0,0,0,0.05)',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-        alignSelf: 'flex-start',
-        flexDirection: 'row',
-    },
-    totalScoreLabel: {
-        fontSize: 11,
-        color: '#333',
-        marginRight: 4,
-    },
-    totalScoreValue: {
-        fontSize: 12,
-        fontWeight: '900',
-        color: '#000000',
-    },
-    scoreSection: {
-        width: 60,
-        marginRight: 12,
-    },
-    scoreInput: {
-        backgroundColor: COLOR_INPUT_BG,
-        textAlign: 'center',
-        height: 50,
-        fontSize: 18,
-    },
-    scoreInputContent: {
-        textAlign: 'center',
-        fontWeight: 'bold',
-        color: COLOR_TEXT_PRIMARY,
-    },
-    controlsSection: {
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 6,
-    },
-    teamSeg: {
-        height: 28,
-        width: 90,
-    },
-    pushButton: {
-        borderRadius: 14,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        minWidth: 80,
-        alignItems: 'center',
-    },
+    scrollContent: { paddingBottom: 110 },
 
-    errorText: {
-        color: '#D32F2F',
-        textAlign: 'center',
-        fontWeight: 'bold',
-        marginTop: 8,
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 8,
     },
+    sectionDot: { width: 8, height: 8, borderRadius: 2 },
+    sectionLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+
+    teamGrid: { flexDirection: 'row', gap: 8, paddingHorizontal: 16 },
+
+    errorText: { color: C.coralPrimary, textAlign: 'center', fontWeight: 'bold', marginTop: 8 },
+
     bottomContainer: {
         padding: 16,
-        backgroundColor: 'white',
+        backgroundColor: C.surface,
         borderTopWidth: 1,
-        borderTopColor: '#f0f0f0',
+        borderTopColor: C.line,
+        flexDirection: 'row',
+        gap: 10,
     },
-    inputSpacing: {
-        marginBottom: 12,
-    }
+    saveBtn: {
+        flex: 1,
+        height: 50,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: C.line,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: C.surface,
+    },
+    saveBtnText: { fontSize: 13, color: C.ink3, fontWeight: '600' },
+    nextBtn: {
+        flex: 2,
+        height: 50,
+        borderRadius: 12,
+        backgroundColor: C.greenPrimary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    nextBtnDisabled: { backgroundColor: C.ink5 },
+    nextBtnText: { fontSize: 16, fontWeight: '800', color: '#ffffff', letterSpacing: 0.3 },
 });

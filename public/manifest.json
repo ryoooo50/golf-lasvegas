@@ -1,0 +1,18 @@
+{
+  "name": "Golf LasVegas",
+  "short_name": "Golf LV",
+  "description": "Las Vegas Golf score calculator",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
