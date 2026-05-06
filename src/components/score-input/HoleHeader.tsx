@@ -88,7 +88,7 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
                     </View>
                     {hasCarry && (
                         <View style={styles.carryBadge}>
-                            <Text style={styles.carryText}>CARRY ×{liveMultiplier}</Text>
+                            <Text style={styles.carryText}>{t('common.multiplierBadge', { n: liveMultiplier })}</Text>
                         </View>
                     )}
                 </TouchableOpacity>

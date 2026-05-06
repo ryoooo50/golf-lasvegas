@@ -295,10 +295,18 @@ export const ScoreInputScreen = () => {
                 onParPress={() => setIsParDialogVisible(true)}
                 onSettingsPress={() => setIsSettingsVisible(true)}
                 onHelpPress={() => setIsHelpVisible(true)}
-                onRestartPress={() => Alert.alert(t('common.restart'), t('common.confirmReset'), [
-                    { text: t('common.cancel'), style: 'cancel' },
-                    { text: t('common.ok'), onPress: () => { useGameStore.getState().resetGame(); } },
-                ])}
+                onRestartPress={() => {
+                    if (Platform.OS === 'web') {
+                        if (window.confirm(t('common.confirmReset'))) {
+                            useGameStore.getState().resetGame();
+                        }
+                    } else {
+                        Alert.alert(t('common.restart'), t('common.confirmReset'), [
+                            { text: t('common.cancel'), style: 'cancel' },
+                            { text: t('common.ok'), onPress: () => { useGameStore.getState().resetGame(); } },
+                        ]);
+                    }
+                }}
                 onScorecardPress={() => setIsScorecardVisible(true)}
                 onHistoryPress={() => setIsHistoryVisible(true)}
                 onLanguageToggle={() => setLanguage(settings.language === 'en' ? 'ja' : 'en')}

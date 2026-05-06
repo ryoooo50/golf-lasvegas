@@ -63,6 +63,9 @@ export default {
             duplicateTeamAssignment: "The same player is assigned more than once. Please check team assignments.",
             scoreCapWarning: "{{names}} will be calculated as 9. Continue?",
             pushOverLimitWarning: "{{names}} exceeds the remaining push count. Please check it.",
+            multiplierBadge: "×{{n}}",
+            pushMult: "PUSH +{{n}}",
+            carryMult: "CARRY +{{n}}",
         },
         setup: {
             playerCount: "Players",

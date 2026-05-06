@@ -47,12 +47,12 @@ export function LivePreviewPanel({ preview, teamANames, teamBNames }: LivePrevie
                 </View>
                 {pushMultiplier > 0 && (
                     <View style={styles.pillSky}>
-                        <Text style={styles.pillSkyText}>PUSH +{pushMultiplier}</Text>
+                        <Text style={styles.pillSkyText}>{t('common.pushMult', { n: pushMultiplier })}</Text>
                     </View>
                 )}
                 {carryOverMultiplier > 0 && (
                     <View style={styles.pillGold}>
-                        <Text style={styles.pillGoldText}>CARRY +{carryOverMultiplier}</Text>
+                        <Text style={styles.pillGoldText}>{t('common.carryMult', { n: carryOverMultiplier })}</Text>
                     </View>
                 )}
                 {eagleMultiplier > 0 && (

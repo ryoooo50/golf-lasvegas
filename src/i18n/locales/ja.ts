@@ -63,6 +63,9 @@ export default {
             duplicateTeamAssignment: "同じプレイヤーが複数のチーム枠に入っています。チーム割り当てを確認してください。",
             scoreCapWarning: "{{names}} のスコアは9として計算されます。このまま続けますか？",
             pushOverLimitWarning: "{{names}} のプッシュ回数が残り回数を超えています。確認してください。",
+            multiplierBadge: "×{{n}}倍",
+            pushMult: "プッシュ +{{n}}",
+            carryMult: "CO +{{n}}",
         },
         setup: {
             playerCount: "プレイヤー数",
