@@ -139,7 +139,7 @@ export const ScoreInputScreen = () => {
         const player = players.find(p => p.id === id);
         if (!player) return;
         const current = pushCounts[id] || 0;
-        const available = Math.max(0, getRemainingPushForPlayer(id) + current);
+        const available = Math.max(0, getRemainingPushForPlayer(id));
         if (available === 0) return;
         const next = current + 1 > available ? 0 : current + 1;
         setPushCounts(prev => ({ ...prev, [id]: next }));
