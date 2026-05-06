@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, RadioButton, Switch, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlayerNamesForm } from '../components/shared/PlayerNamesForm';
 import { HistoryDialog } from '../components/shared/HistoryDialog';
 import { useGameStore } from '../store/gameStore';
+import { useAuthStore } from '../store/authStore';
 import { Player } from '../types';
 
 const BG_IMAGE = require('../../assets/images/icon.png');
@@ -16,14 +17,16 @@ const DEFAULT_PLAYER_NAMES = ['Player 1', 'Player 2', 'Player 3', 'Player 4'];
 export const StartScreen = () => {
     const { startGame, updateSettings, updatePlayerName, settings, players, savedRounds, resumeRound } =
         useGameStore();
+    const deleteSavedRound = useGameStore((state) => state.deleteSavedRound);
+    const { signOut, user } = useAuthStore();
     const { t } = useTranslation();
 
     // Form state
     const [matchName, setMatchName] = useState(settings.matchName ?? '');
     const [rate, setRate] = useState((settings.rate ?? 10).toString());
-    const [playerCount, setPlayerCount] = useState<3 | 4>(4);
+    const [playerCount, setPlayerCount] = useState<3 | 4>(settings.playerCount ?? 4);
     const [pushLimit, setPushLimit] = useState(settings.maxPushCountPerHalf ?? 2);
-    const [birdyPushRecovery, setBirdyPushRecovery] = useState(false);
+    const [birdyPushRecovery, setBirdyPushRecovery] = useState(settings.birdyPushRecovery ?? false);
     const [startCourse, setStartCourse] = useState<'OUT' | 'IN'>('OUT');
     const [playerNames, setPlayerNames] = useState<string[]>([
         players[0]?.name ?? DEFAULT_PLAYER_NAMES[0],
@@ -68,6 +71,8 @@ export const StartScreen = () => {
             matchName,
             rate: isNaN(parsedRate) ? 10 : parsedRate,
             maxPushCountPerHalf: pushLimit,
+            playerCount,
+            birdyPushRecovery,
         });
 
         // Apply player names directly via store
@@ -84,6 +89,22 @@ export const StartScreen = () => {
 
     const decrementPushLimit = () => setPushLimit((v) => Math.max(0, v - 1));
     const incrementPushLimit = () => setPushLimit((v) => Math.min(5, v + 1));
+
+    const handleDeleteRound = (roundId: string) => {
+        Alert.alert(t('common.delete'), t('common.confirmDeleteRound'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+                text: t('common.delete'),
+                style: 'destructive',
+                onPress: async () => {
+                    const result = await deleteSavedRound(roundId);
+                    if (result.cloudStatus === 'queued') {
+                        Alert.alert(t('common.deletedLocalCloudQueued'));
+                    }
+                },
+            },
+        ]);
+    };
 
     return (
         <View style={styles.container}>
@@ -230,6 +251,16 @@ export const StartScreen = () => {
                     >
                         {t('common.viewHistory')}
                     </Button>
+                    {user && (
+                        <Button
+                            mode="text"
+                            icon="logout"
+                            textColor="#ddd"
+                            onPress={() => signOut()}
+                        >
+                            {t('auth.logoutButton')}
+                        </Button>
+                    )}
                 </ScrollView>
 
                 <Text style={styles.footer}>© 2024 Golf LasVegas</Text>
@@ -240,6 +271,7 @@ export const StartScreen = () => {
                 onDismiss={() => setIsHistoryVisible(false)}
                 savedRounds={savedRounds}
                 onResume={(roundId) => resumeRound(roundId)}
+                onDelete={handleDeleteRound}
             />
         </View>
     );

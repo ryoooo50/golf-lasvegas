@@ -11,9 +11,8 @@ interface PlayerScoreCardProps {
     isBirdie: boolean;
     pushCount: number;
     par: number | null;
-    isFront9: boolean;
     totalScore: number;
-    maxPushPerHalf: number;
+    remainingPush: number;
     onScoreChange: (id: PlayerId, value: number | undefined) => void;
     onBirdieToggle: (id: PlayerId, value: boolean) => void;
     onPushCycle: (id: PlayerId) => void;
@@ -23,18 +22,16 @@ interface PlayerScoreCardProps {
 }
 
 export function PlayerScoreCard({
-    player, team, score, isBirdie, pushCount, par, isFront9,
-    totalScore, maxPushPerHalf, onScoreChange, onBirdieToggle, onPushCycle,
+    player, team, score, isBirdie, pushCount, par,
+    totalScore, remainingPush, onScoreChange, onBirdieToggle, onPushCycle,
     onTeamToggle, onNamePress, onParRequired,
 }: PlayerScoreCardProps) {
     const { t } = useTranslation();
     const isTeamA = team === 'A';
     const teamColor = isTeamA ? C.greenPrimary : C.coralPrimary;
-    const teamTint = isTeamA ? C.greenTint : C.coralTint;
     const teamDeep = isTeamA ? C.greenDeep : C.coralDeep;
 
-    const usedInHalf = isFront9 ? player.pushUsageCount.front9 : player.pushUsageCount.back9;
-    const available = Math.max(0, maxPushPerHalf - usedInHalf);
+    const available = Math.max(0, remainingPush);
     const canPush = available > 0 || pushCount > 0;
 
     const isAutoEagle = par !== null && score !== undefined && score > 0 && score <= par - 2;
@@ -50,11 +47,10 @@ export function PlayerScoreCard({
                 isAutoRef.current = false;
             }
         }
-    }, [score, par]);
+    }, [score, par, isBirdie, onBirdieToggle, player.id]);
 
     const initials = player.name.slice(0, 2).toUpperCase();
 
-    const displayScore = score ?? par ?? 0;
     const diffFromPar = par !== null && score !== undefined ? score - par : null;
 
     const diffLabel = diffFromPar === null
@@ -155,7 +151,7 @@ export function PlayerScoreCard({
             >
                 <Text style={[styles.pushText, { color: pushCount > 0 ? '#fff' : C.sky }]}>
                     {t('common.push')}{pushCount > 0 ? ` ×${pushCount}` : ''}
-                    {'  '}{usedInHalf + pushCount}/{maxPushPerHalf}
+                    {'  '}残{Math.max(0, available - pushCount)}
                 </Text>
             </TouchableOpacity>
         </View>

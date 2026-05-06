@@ -12,6 +12,7 @@ import { HistoryDialog } from '../components/shared/HistoryDialog';
 import { ScorecardDialog } from '../components/shared/ScorecardDialog';
 import { C } from '../theme/colors';
 import { useGameStore } from '../store/gameStore';
+import { useAuthStore } from '../store/authStore';
 import { CalculationBreakdown, PlayerId, ScoreInput } from '../types';
 import { calculateLivePreview } from '../utils/golfLogic';
 
@@ -19,8 +20,10 @@ export const ScoreInputScreen = () => {
     const {
         players, currentHole, nextHoleMultiplier, completeHole, settings,
         setLanguage, getRecommendedPairs, getPlayerTotalScore, updatePlayerName,
-        goToHole, history, updateSettings, saveCurrentRound, savedRounds, resumeRound,
+        getRemainingPushForPlayer, goToHole, history, updateSettings, saveCurrentRound, savedRounds, resumeRound,
     } = useGameStore();
+    const deleteSavedRound = useGameStore((state) => state.deleteSavedRound);
+    const { signOut, user } = useAuthStore();
     const { t } = useTranslation();
     const bgScrollRef = useRef<ScrollView>(null);
 
@@ -81,11 +84,11 @@ export const ScoreInputScreen = () => {
 
         setEditRate(settings.rate.toString());
         setEditPushLimit(settings.maxPushCountPerHalf.toString());
-    }, [currentHole, history]);
+    }, [currentHole, history, getRecommendedPairs, settings.maxPushCountPerHalf, settings.rate]);
 
     useEffect(() => {
         if (par === null) setIsParDialogVisible(true);
-    }, [currentHole]);
+    }, [currentHole, par]);
 
     const isFront9 = currentHole <= 9;
     const teamA = players.filter(p => teamAssignments[p.id] === 'A');
@@ -135,13 +138,44 @@ export const ScoreInputScreen = () => {
     const cyclePush = (id: PlayerId) => {
         const player = players.find(p => p.id === id);
         if (!player) return;
-        const usedInHalf = isFront9 ? player.pushUsageCount.front9 : player.pushUsageCount.back9;
-        const maxPush = settings.maxPushCountPerHalf;
-        const available = Math.max(0, maxPush - usedInHalf);
-        if (available === 0) return;
         const current = pushCounts[id] || 0;
+        const available = Math.max(0, getRemainingPushForPlayer(id) + current);
+        if (available === 0) return;
         const next = current + 1 > available ? 0 : current + 1;
         setPushCounts(prev => ({ ...prev, [id]: next }));
+    };
+
+    const getInputWarning = (scoreInputs: Record<PlayerId, ScoreInput>): string | null => {
+        const assignedIds = [...teamA.map(p => p.id), ...teamB.map(p => p.id)];
+        if (new Set(assignedIds).size !== assignedIds.length) {
+            return t('common.duplicateTeamAssignment');
+        }
+
+        const overCapPlayers = players
+            .filter(p => (scoreInputs[p.id]?.score ?? 0) > 9 && p.type !== 'bogey_kun')
+            .map(p => p.name);
+        if (overCapPlayers.length > 0) {
+            return t('common.scoreCapWarning', { names: overCapPlayers.join(', ') });
+        }
+
+        const overPushPlayers = players
+            .filter(p => (scoreInputs[p.id]?.pushCount ?? 0) > getRemainingPushForPlayer(p.id) + (pushCounts[p.id] || 0))
+            .map(p => p.name);
+        if (overPushPlayers.length > 0) {
+            return t('common.pushOverLimitWarning', { names: overPushPlayers.join(', ') });
+        }
+
+        return null;
+    };
+
+    const alertSaveResult = (result: Awaited<ReturnType<typeof saveCurrentRound>>) => {
+        if (result.cloudStatus === 'saved') {
+            Alert.alert(t('common.roundSaved'), t('auth.cloudSaved'), [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+        } else if (result.cloudStatus === 'queued') {
+            Alert.alert(t('common.roundSaved'), t('auth.cloudQueued'), [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+        } else {
+            Alert.alert(t('common.roundSaved'), '', [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+        }
     };
 
     const handleSubmit = () => {
@@ -160,7 +194,9 @@ export const ScoreInputScreen = () => {
             };
         });
 
-        const doComplete = () => {
+        const warning = getInputWarning(scoreInputs);
+
+        const doComplete = async (saveAfterComplete = false) => {
             completeHole({
                 par,
                 scores: scoreInputs,
@@ -173,22 +209,61 @@ export const ScoreInputScreen = () => {
                 setResultBreakdown(savedResult.breakdown);
                 setIsResultVisible(true);
             }
+
+            if (saveAfterComplete) {
+                const result = await useGameStore.getState().saveCurrentRound();
+                alertSaveResult(result);
+            }
         };
 
-        if (currentHole === 18) {
+        const proceed = () => {
+            if (currentHole === 18) {
+                Alert.alert(
+                    t('common.finishGame'),
+                    t('common.confirmFinishAndSave'),
+                    [
+                        { text: t('common.cancel'), style: 'cancel' },
+                        { text: t('common.ok'), onPress: () => { void doComplete(true); } },
+                    ],
+                );
+            } else {
+                void doComplete(false);
+            }
+        };
+
+        if (warning) {
             Alert.alert(
-                t('common.finishGame'),
-                t('common.confirmFinish'),
-                [{ text: t('common.cancel'), style: 'cancel' }, { text: t('common.ok'), onPress: doComplete }]
+                t('common.warning'),
+                warning,
+                [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    { text: t('common.ok'), onPress: proceed },
+                ],
             );
         } else {
-            doComplete();
+            proceed();
         }
     };
 
-    const handleSaveGame = () => {
-        saveCurrentRound();
-        Alert.alert(t('common.roundSaved'), '', [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+    const handleSaveGame = async () => {
+        const result = await saveCurrentRound();
+        alertSaveResult(result);
+    };
+
+    const handleDeleteRound = (roundId: string) => {
+        Alert.alert(t('common.delete'), t('common.confirmDeleteRound'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+                text: t('common.delete'),
+                style: 'destructive',
+                onPress: async () => {
+                    const result = await deleteSavedRound(roundId);
+                    if (result.cloudStatus === 'queued') {
+                        Alert.alert(t('common.deletedLocalCloudQueued'));
+                    }
+                },
+            },
+        ]);
     };
 
     const openNameEditor = (id: PlayerId, name: string) => {
@@ -251,9 +326,8 @@ export const ScoreInputScreen = () => {
                                     isBirdie={birdieFlags[p.id] ?? false}
                                     pushCount={pushCounts[p.id] ?? 0}
                                     par={par}
-                                    isFront9={isFront9}
                                     totalScore={getPlayerTotalScore(p.id)}
-                                    maxPushPerHalf={settings.maxPushCountPerHalf}
+                                    remainingPush={getRemainingPushForPlayer(p.id)}
                                     onScoreChange={handleScoreChange}
                                     onBirdieToggle={handleBirdieToggle}
                                     onPushCycle={cyclePush}
@@ -279,9 +353,8 @@ export const ScoreInputScreen = () => {
                                     isBirdie={birdieFlags[p.id] ?? false}
                                     pushCount={pushCounts[p.id] ?? 0}
                                     par={par}
-                                    isFront9={isFront9}
                                     totalScore={getPlayerTotalScore(p.id)}
-                                    maxPushPerHalf={settings.maxPushCountPerHalf}
+                                    remainingPush={getRemainingPushForPlayer(p.id)}
                                     onScoreChange={handleScoreChange}
                                     onBirdieToggle={handleBirdieToggle}
                                     onPushCycle={cyclePush}
@@ -345,6 +418,7 @@ export const ScoreInputScreen = () => {
                 onDismiss={() => setIsHistoryVisible(false)}
                 savedRounds={savedRounds}
                 onResume={(roundId) => resumeRound(roundId)}
+                onDelete={handleDeleteRound}
             />
 
             <ResultSummaryDialog
@@ -386,6 +460,19 @@ export const ScoreInputScreen = () => {
                         <Text style={{ marginBottom: 10 }}>{settings.matchName}</Text>
                         <TextInput label={t('common.rate')} value={editRate} onChangeText={setEditRate} keyboardType="numeric" style={{ marginBottom: 12 }} />
                         <TextInput label={t('common.pushLimit')} value={editPushLimit} onChangeText={setEditPushLimit} keyboardType="numeric" />
+                        {user && (
+                            <Button
+                                mode="outlined"
+                                icon="logout"
+                                style={{ marginTop: 16 }}
+                                onPress={() => {
+                                    setIsSettingsVisible(false);
+                                    signOut();
+                                }}
+                            >
+                                {t('auth.logoutButton')}
+                            </Button>
+                        )}
                     </Dialog.Content>
                     <Dialog.Actions>
                         <Button onPress={() => setIsSettingsVisible(false)}>{t('common.cancel')}</Button>

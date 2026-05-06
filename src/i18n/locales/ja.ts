@@ -47,6 +47,7 @@ export default {
             finish: "終了",
             finishGame: "ゲーム終了",
             confirmFinish: "スコア入力を終了して結果画面に進みますか？",
+            confirmFinishAndSave: "スコア入力を終了して、このラウンドを保存しますか？",
             draw: "引き分け",
             wins: "勝利",
             calculation: "計算内訳",
@@ -56,6 +57,12 @@ export default {
             holesPlayed: "ホール消化",
             resume: "再開",
             untitledMatch: "名称未設定",
+            delete: "削除",
+            confirmDeleteRound: "この履歴を削除しますか？",
+            deletedLocalCloudQueued: "ローカル履歴を削除しました。クラウド削除はオンライン復帰後に同期されます。",
+            duplicateTeamAssignment: "同じプレイヤーが複数のチーム枠に入っています。チーム割り当てを確認してください。",
+            scoreCapWarning: "{{names}} のスコアは9として計算されます。このまま続けますか？",
+            pushOverLimitWarning: "{{names}} のプッシュ回数が残り回数を超えています。確認してください。",
         },
         setup: {
             playerCount: "プレイヤー数",
@@ -81,6 +88,7 @@ export default {
             logoutButton: "ログアウト",
             cloudSaved: "クラウドに保存しました",
             cloudSaveError: "クラウド保存に失敗しました",
+            cloudQueued: "クラウド保存はオンライン復帰後に同期されます",
         },
     }
 };

@@ -9,9 +9,10 @@ interface HistoryDialogProps {
     onDismiss: () => void;
     savedRounds: RoundResult[];
     onResume?: (roundId: string) => void;
+    onDelete?: (roundId: string) => void;
 }
 
-export const HistoryDialog: React.FC<HistoryDialogProps> = ({ visible, onDismiss, savedRounds, onResume }) => {
+export const HistoryDialog: React.FC<HistoryDialogProps> = ({ visible, onDismiss, savedRounds, onResume, onDelete }) => {
     const { t } = useTranslation();
 
     const handleResume = (roundId: string) => {
@@ -44,6 +45,7 @@ export const HistoryDialog: React.FC<HistoryDialogProps> = ({ visible, onDismiss
                                                 }).join('  ')}
                                             </Text>
                                         </View>
+                                        <View style={styles.actionColumn}>
                                         {onResume && (
                                             <Button
                                                 mode="contained"
@@ -56,6 +58,18 @@ export const HistoryDialog: React.FC<HistoryDialogProps> = ({ visible, onDismiss
                                                 {t('common.resume')}
                                             </Button>
                                         )}
+                                        {onDelete && (
+                                            <Button
+                                                mode="text"
+                                                compact
+                                                textColor="#B91C1C"
+                                                onPress={() => onDelete(r.id)}
+                                                labelStyle={styles.resumeLabel}
+                                            >
+                                                {t('common.delete')}
+                                            </Button>
+                                        )}
+                                        </View>
                                     </View>
                                     {index < savedRounds.length - 1 && <Divider />}
                                 </View>
@@ -87,6 +101,7 @@ const styles = StyleSheet.create({
     roundDate: { fontSize: 11, color: '#888', marginBottom: 2 },
     roundHoles: { fontSize: 11, color: '#666', marginBottom: 4 },
     roundScores: { fontSize: 12, color: '#333' },
+    actionColumn: { gap: 4, alignItems: 'flex-end' },
     resumeButton: { borderRadius: 8 },
     resumeLabel: { fontSize: 12 },
 });

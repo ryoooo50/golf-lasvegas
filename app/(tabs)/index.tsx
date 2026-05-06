@@ -9,6 +9,7 @@ import { useGameStore } from '../../src/store/gameStore';
 export default function HomeScreen() {
   const { user, isGuest, isLoading, initialize } = useAuthStore();
   const gameStatus = useGameStore((state) => state.gameStatus);
+  const loadCloudRounds = useGameStore((state) => state.loadCloudRounds);
 
   // React.StrictMode 対策: 一度だけ initialize() を呼ぶ
   const initialized = useRef(false);
@@ -17,6 +18,11 @@ export default function HomeScreen() {
     initialized.current = true;
     initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    if (!user || isGuest) return;
+    loadCloudRounds();
+  }, [user, isGuest, loadCloudRounds]);
 
   if (isLoading) {
     return (

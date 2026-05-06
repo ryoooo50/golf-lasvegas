@@ -47,6 +47,7 @@ export default {
             finish: "Finish",
             finishGame: "Finish Game",
             confirmFinish: "End score input and go to result screen?",
+            confirmFinishAndSave: "Finish score input and save this round?",
             draw: "Draw",
             wins: "wins",
             calculation: "Calculation",
@@ -56,6 +57,12 @@ export default {
             holesPlayed: " holes played",
             resume: "Resume",
             untitledMatch: "Untitled Match",
+            delete: "Delete",
+            confirmDeleteRound: "Delete this saved match?",
+            deletedLocalCloudQueued: "Deleted locally. Cloud deletion will sync when you are back online.",
+            duplicateTeamAssignment: "The same player is assigned more than once. Please check team assignments.",
+            scoreCapWarning: "{{names}} will be calculated as 9. Continue?",
+            pushOverLimitWarning: "{{names}} exceeds the remaining push count. Please check it.",
         },
         setup: {
             playerCount: "Players",
@@ -81,6 +88,7 @@ export default {
             logoutButton: "Log Out",
             cloudSaved: "Saved to cloud",
             cloudSaveError: "Failed to save to cloud",
+            cloudQueued: "Cloud save will sync when you are back online",
         },
     }
 };

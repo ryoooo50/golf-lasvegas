@@ -101,6 +101,7 @@ export interface HoleData {
 
 export interface RoundResult {
   id: string; // UUID
+  cloudId?: string | null; // Supabase rounds.id。未同期ローカル保存時は null
   date: string; // ISO
   name: string; // Match Name
   players: Player[];
@@ -128,6 +129,7 @@ export interface GameState {
 
   // Saved Rounds
   savedRounds: RoundResult[];
+  pendingCloudSaves: PendingCloudSave[];
 
   // 次のホールに持ち越されている倍率（初期値1, 引き分け発生で x2, x4...）
   nextHoleMultiplier: number;
@@ -141,6 +143,32 @@ export interface GameState {
   pushBonus: Record<PlayerId, number>;
   // クラウド保存時の Supabase ラウンド ID（ゲスト時は null）
   cloudRoundId: string | null;
+}
+
+export interface PendingCloudSave {
+  id: string;
+  operation: 'upsert' | 'delete';
+  userId: string;
+  localRoundId: string;
+  cloudRoundId?: string | null;
+  roundData?: {
+    match_name: string;
+    rate: number;
+    player_count: number;
+    player_names: Record<string, string>;
+    push_limit: number;
+    birdy_push_recovery: boolean;
+    holes: unknown;
+    total_points: Record<string, number>;
+  };
+  createdAt: string;
+}
+
+export interface SaveRoundResult {
+  localSaved: boolean;
+  cloudStatus: 'saved' | 'queued' | 'guest' | 'no-data';
+  roundId?: string;
+  message?: string;
 }
 
 // ─── 新ゲーム状態（新アーキテクチャ用） ──────────────────────────

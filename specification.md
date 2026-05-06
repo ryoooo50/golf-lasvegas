@@ -34,7 +34,8 @@ interface Player {
 interface ScoreInput {
   score: number;
   isBirdie: boolean; // バーディー以上ならtrue
-  usePush: boolean;  // このホールでプッシュ権を行使するか
+  isEagle: boolean;  // イーグル以下ならtrue
+  pushCount: number; // このホールでプッシュ権を何回行使するか
 }
 
 interface HoleResult {
@@ -91,7 +92,11 @@ interface GameState {
 
 **相殺ルール**: 両チームにバーディーが出た場合、両チームともフリップする（または相殺して通常通りとするかは実装時に選択可能にするが、MVPでは「条件を満たせばフリップ」という単純ルールを採用し、両チームフリップとする）。
 
-### 4.2. 勝敗と基本ポイント算出
+### 4.2. スコアキャップ、勝敗と基本ポイント算出
+
+個人スコアは連結前に最大9でキャップする。
+
+- 例: 10打、12打はいずれも9として扱う。
 
 `Diff = |TeamA_Score - TeamB_Score|`
 
@@ -101,27 +106,48 @@ interface GameState {
 
 最終的なポイントは以下の式で算出する。
 
-$$ \text{FinalPoint} = \text{Diff} \times \text{PushMultiplier} \times \text{CarryOverMultiplier} $$
+$$ \text{FinalPoint} = \text{Diff} \times \text{FinalMultiplier} $$
 
-#### A. プッシュ倍率 (PushMultiplier)
+`FinalMultiplier` は、プッシュ・キャリーオーバー・イーグルの倍率要素を加算して決定する。
 
-参加者全員の `usePush` フラグの合計数 (`totalPushCount`) をカウントする。
+$$ \text{FinalMultiplier} = \max(1, \text{PushMult} + \text{CarryOverMult} + \text{EagleMult}) $$
+
+倍率要素が何もない場合は1倍とする。
+
+#### A. プッシュ倍率 (PushMult)
+
+参加者全員の `pushCount` の合計数 (`totalPushCount`) をカウントする。
 
 **計算式:**
 
-- `totalPushCount == 0` の場合: 1倍
-- `totalPushCount > 0` の場合: `2 * totalPushCount` 倍
-  - 1人プッシュ: 2倍
-  - 2人プッシュ: 4倍
-  - 3人プッシュ: 6倍
-  - 4人プッシュ: 8倍
+- `totalPushCount == 0` の場合: 0
+- `totalPushCount > 0` の場合: `2 * totalPushCount`
+  - 1プッシュ: +2
+  - 2プッシュ: +4
+  - 3プッシュ: +6
+  - 4プッシュ: +8
 
-#### B. キャリーオーバー倍率 (CarryOverMultiplier)
+#### B. キャリーオーバー倍率 (CarryOverMult)
 
-前のホールからの持ち越し倍率。
+前のホールからの持ち越しレベル。
 
-- 通常は 1倍。
-- 前ホールが引き分けの場合、2倍 になる。連続引き分けの場合は 4倍, 6倍, 8倍 と「引き分け連続回数 × 2」で増加する。
+- 通常は 0。
+- 前ホールが引き分けの場合、+2 になる。
+- 連続引き分けの場合は +4, +6, +8 と「引き分け連続回数 × 2」で増加する。
+
+#### C. イーグル倍率 (EagleMult)
+
+イーグル以下（パー-2以下、ホールインワン含む）のプレイヤー人数をカウントする。
+
+- `EagleMult = eagleCount * 2`
+- イーグルはバーディーフリップの条件にも含める。
+
+#### D. 加算例
+
+- プッシュなし、キャリーなし、イーグルなし: `max(1, 0 + 0 + 0) = 1倍`
+- 1プッシュのみ: `max(1, 2 + 0 + 0) = 2倍`
+- 2プッシュ + キャリー1回: `max(1, 4 + 2 + 0) = 6倍`
+- 1プッシュ + キャリー1回 + イーグル1人: `max(1, 2 + 2 + 2) = 6倍`
 
 ### 4.4. 引き分け (Draw) の処理
 
@@ -138,6 +164,24 @@ $$ \text{FinalPoint} = \text{Diff} \times \text{PushMultiplier} \times \text{Car
 - 計算を実行しポイントを確定。
 - `nextHoleMultiplier` を 1 にリセットする。
 
+### 4.5. 3人モード
+
+3人モードでは、実プレイヤー3名に加えて仮想プレイヤー「ボギーくん」を追加し、内部的には4人分のチーム戦として計算する。
+
+- ボギーくんのスコアは常に `par + 1`。
+- ボギーくんはバーディー、イーグル、プッシュ、バーディープッシュ復活の対象外。
+- ボギーくんとペアになる実プレイヤーを「ソロプレイヤー」とする。
+- ソロプレイヤーのホールポイントは、通常計算後に2倍する。
+- チームペアは4人モードと同じ3パターンを使い、3人モードではランキング末尾にボギーくんを置いてローテーションする。
+
+チームペアのローテーション:
+
+- `(holeNumber - 1) % 3 == 0`: P1+P2 vs P3+P4
+- `(holeNumber - 1) % 3 == 1`: P1+P3 vs P2+P4
+- `(holeNumber - 1) % 3 == 2`: P1+P4 vs P2+P3
+
+3人モードでは P4 がボギーくんになるため、各3ホールでソロ担当が入れ替わる。
+
 ## 5. UI/UX 要件
 
 ### 5.1. 入力画面 (Score Input)
@@ -153,7 +197,7 @@ $$ \text{FinalPoint} = \text{Diff} \times \text{PushMultiplier} \times \text{Car
 
 **Push Toggle:**
 
-- ハーフごとの残り回数 (`maxPushCountPerHalf` - `usedCount`) を表示。
+- ハーフごとの残り回数 (`maxPushCountPerHalf + pushBonus - usedCount`) を表示。
 - 残り回数が0なら選択不可(Disabled)。
 
 **リアルタイム予測:**
@@ -166,7 +210,7 @@ $$ \text{FinalPoint} = \text{Diff} \times \text{PushMultiplier} \times \text{Car
 
 なぜそのポイントになったのかの式を表示する。
 
-- 例: `(64 - 45) × Push(4倍) × CarryOver(2倍) = 152 pts`
+- 例: `(64 - 45) × (Push +4 + Carry +2) = 114 pts`
 - 特にバーディーによるスコア入れ替え（46 -> 64）が発生した場合は、それがわかるように強調表示する。
 
 ### 5.3. 設定変更

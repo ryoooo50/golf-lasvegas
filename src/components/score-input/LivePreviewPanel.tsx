@@ -24,7 +24,6 @@ export function LivePreviewPanel({ preview, teamANames, teamBNames }: LivePrevie
 
     const isDraw = winnerTeam === 'draw';
     const winnerColor = winnerTeam === 'A' ? C.greenPrimary : C.coralPrimary;
-    const winnerName = winnerTeam === 'A' ? teamANames : teamBNames;
 
     return (
         <View style={styles.card}>
