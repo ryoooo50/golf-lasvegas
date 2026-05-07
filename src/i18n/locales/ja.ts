@@ -66,6 +66,7 @@ export default {
             multiplierBadge: "×{{n}}倍",
             pushMult: "プッシュ +{{n}}",
             carryMult: "CO +{{n}}",
+            resetHole: "このホールをリセット",
         },
         setup: {
             playerCount: "プレイヤー数",

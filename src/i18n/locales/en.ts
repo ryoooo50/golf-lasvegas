@@ -66,6 +66,7 @@ export default {
             multiplierBadge: "×{{n}}",
             pushMult: "PUSH +{{n}}",
             carryMult: "CARRY +{{n}}",
+            resetHole: "Reset This Hole",
         },
         setup: {
             playerCount: "Players",

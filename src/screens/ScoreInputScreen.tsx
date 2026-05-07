@@ -20,7 +20,7 @@ export const ScoreInputScreen = () => {
     const {
         players, currentHole, nextHoleMultiplier, completeHole, settings,
         setLanguage, getRecommendedPairs, getPlayerTotalScore, updatePlayerName,
-        getRemainingPushForPlayer, goToHole, history, updateSettings, saveCurrentRound, savedRounds, resumeRound,
+        getRemainingPushForPlayer, goToHole, resetHole, history, updateSettings, saveCurrentRound, savedRounds, resumeRound,
     } = useGameStore();
     const deleteSavedRound = useGameStore((state) => state.deleteSavedRound);
     const { signOut, user } = useAuthStore();
@@ -250,6 +250,23 @@ export const ScoreInputScreen = () => {
         alertSaveResult(result);
     };
 
+    const handleResetHole = () => {
+        const doReset = () => {
+            resetHole(currentHole);
+            setScores({});
+            setBirdieFlags({});
+            setPushCounts({});
+        };
+        if (Platform.OS === 'web') {
+            if (window.confirm(t('common.resetHole') + '?')) doReset();
+        } else {
+            Alert.alert(t('common.resetHole'), '', [
+                { text: t('common.cancel'), style: 'cancel' },
+                { text: t('common.ok'), style: 'destructive', onPress: doReset },
+            ]);
+        }
+    };
+
     const handleDeleteRound = (roundId: string) => {
         Alert.alert(t('common.delete'), t('common.confirmDeleteRound'), [
             { text: t('common.cancel'), style: 'cancel' },
@@ -385,25 +402,32 @@ export const ScoreInputScreen = () => {
                     </ScrollView>
 
                     <View style={styles.bottomContainer}>
-                        <TouchableOpacity
-                            onPress={handleSaveGame}
-                            style={styles.saveBtn}
-                        >
-                            <Text style={styles.saveBtnText}>{t('common.saveGame')}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={handleSubmit}
-                            disabled={!canSubmit}
-                            style={[styles.nextBtn, !canSubmit && styles.nextBtnDisabled]}
-                        >
-                            <Text style={styles.nextBtnText}>
-                                {isEditingExisting
-                                    ? t('common.updateHole')
-                                    : currentHole === 18
-                                    ? t('common.finish')
-                                    : `${t('common.nextHole')} →`}
-                            </Text>
-                        </TouchableOpacity>
+                        {isEditingExisting && (
+                            <TouchableOpacity onPress={handleResetHole} style={styles.resetBtn}>
+                                <Text style={styles.resetBtnText}>{t('common.resetHole')}</Text>
+                            </TouchableOpacity>
+                        )}
+                        <View style={styles.bottomRow}>
+                            <TouchableOpacity
+                                onPress={handleSaveGame}
+                                style={styles.saveBtn}
+                            >
+                                <Text style={styles.saveBtnText}>{t('common.saveGame')}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handleSubmit}
+                                disabled={!canSubmit}
+                                style={[styles.nextBtn, !canSubmit && styles.nextBtnDisabled]}
+                            >
+                                <Text style={styles.nextBtnText}>
+                                    {isEditingExisting
+                                        ? t('common.updateHole')
+                                        : currentHole === 18
+                                        ? t('common.finish')
+                                        : `${t('common.nextHole')} →`}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </KeyboardAvoidingView>
@@ -526,9 +550,21 @@ const styles = StyleSheet.create({
         backgroundColor: C.surface,
         borderTopWidth: 1,
         borderTopColor: C.line,
+        gap: 8,
+    },
+    bottomRow: {
         flexDirection: 'row',
         gap: 10,
     },
+    resetBtn: {
+        height: 38,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: C.coralPrimary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    resetBtnText: { fontSize: 13, color: C.coralPrimary, fontWeight: '600' },
     saveBtn: {
         flex: 1,
         height: 50,

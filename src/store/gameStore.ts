@@ -197,6 +197,7 @@ interface GameActions {
     getRemainingPushForPlayer: (id: PlayerId) => number;
 
     goToHole: (holeNumber: number) => void;
+    resetHole: (holeNumber: number) => void;
     startGame: (startHole: 1 | 10) => void;
     saveCurrentRound: () => Promise<SaveRoundResult>;
     deleteSavedRound: (roundId: string) => Promise<{ cloudStatus: 'deleted' | 'queued' | 'local-only' }>;
@@ -419,6 +420,24 @@ export const useGameStore = create<GameStore>()(
                 if (id === BOGEY_KUN_ID) return 0;
                 const { settings, pushUsed, pushBonus } = get();
                 return getRemainingPush(id, settings.maxPushCountPerHalf, pushUsed, pushBonus);
+            },
+
+            // ── ホールリセット ───────────────────────────────────────
+            resetHole: (holeNumber) => {
+                const { history, players, settings } = get();
+                const newHistory = history.filter(h => h.holeNumber !== holeNumber);
+                const rebuiltPushState = rebuildPushStateFromHistory(players, newHistory, settings);
+
+                const prevResult = newHistory.find(h => h.holeNumber === holeNumber - 1);
+                const restoredMultiplier = prevResult ? prevResult.nextHoleMultiplier : 1;
+
+                set({
+                    history: newHistory,
+                    players: rebuiltPushState.players,
+                    pushUsed: rebuiltPushState.pushUsed,
+                    pushBonus: rebuiltPushState.pushBonus,
+                    nextHoleMultiplier: restoredMultiplier,
+                });
             },
 
             // ── ホール移動 ───────────────────────────────────────────
