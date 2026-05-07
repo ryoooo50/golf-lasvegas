@@ -154,10 +154,9 @@ export function calculateHoleResult(params: CalculateHoleResultParams): HoleResu
         losingTeamIds.forEach(id => { pointsResult[id] = -finalPoints; });
     }
 
-    // 6. 次ホールのCOLevel
-    const nextCarryOverLevel = computeNextCarryOverLevel(isDraw, currentCarryOverLevel);
-    // 後方互換のために nextHoleMultiplier も計算する（COLevel → COMult → 0なら1）
-    const nextHoleMultiplier = nextCarryOverLevel === 0 ? 1 : nextCarryOverLevel * 2;
+    // 6. 次ホールの倍率: 引き分け時は総倍率（push+CO+eagle）を全て持ち越し+2
+    //    例: ×4のホールが引き分け → 4+2=×6
+    const nextHoleMultiplier = isDraw ? pushMult + coMult + eagleMult + 2 : 1;
 
     // 7. 計算内訳の生成
     const teamABreakdown: TeamScoreBreakdown = {

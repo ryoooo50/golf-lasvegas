@@ -70,7 +70,7 @@ export function LivePreviewPanel({ preview, teamANames, teamBNames }: LivePrevie
                 {isDraw ? (
                     <View style={{ flex: 1 }}>
                         <Text style={styles.drawLabel}>{t('common.draw')}</Text>
-                        <Text style={styles.drawSub}>{t('common.nextCarryOver', { rate: carryOverMultiplier === 0 ? 2 : carryOverMultiplier + 2 })}</Text>
+                        <Text style={styles.drawSub}>{t('common.nextCarryOver', { rate: pushMultiplier + carryOverMultiplier + eagleMultiplier + 2 })}</Text>
                     </View>
                 ) : (
                     <>
