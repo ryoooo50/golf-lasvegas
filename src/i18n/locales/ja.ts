@@ -67,6 +67,7 @@ export default {
             pushMult: "プッシュ +{{n}}",
             carryMult: "CO +{{n}}",
             resetHole: "このホールをリセット",
+            holeTab: "ホール",
         },
         setup: {
             playerCount: "プレイヤー数",

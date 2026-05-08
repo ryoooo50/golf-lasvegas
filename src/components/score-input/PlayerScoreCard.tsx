@@ -32,7 +32,8 @@ export function PlayerScoreCard({
     const teamDeep = isTeamA ? C.greenDeep : C.coralDeep;
 
     const available = Math.max(0, remainingPush);
-    const canPush = available > 0 || pushCount > 0;
+    const isOverLimit = pushCount > available;
+    const canPush = true; // 上限超過も許可（フィールドでの追加対応）
 
     const isAutoEagle = par !== null && score !== undefined && score > 0 && score <= par - 2;
     const isAutoBirdie = par !== null && score !== undefined && score > 0 && score === par - 1;
@@ -143,15 +144,16 @@ export function PlayerScoreCard({
                 disabled={!canPush}
                 style={[
                     styles.pushPill,
-                    pushCount > 0
+                    isOverLimit
+                        ? { backgroundColor: C.coralPrimary, borderColor: C.coralPrimary }
+                        : pushCount > 0
                         ? { backgroundColor: C.sky, borderColor: C.sky }
                         : { backgroundColor: C.skyTint, borderColor: 'rgba(91,141,184,0.3)' },
-                    !canPush && pushCount === 0 && styles.pushPillDisabled,
                 ]}
             >
                 <Text style={[styles.pushText, { color: pushCount > 0 ? '#fff' : C.sky }]}>
                     {t('common.push')}{pushCount > 0 ? ` ×${pushCount}` : ''}
-                    {'  '}残{Math.max(0, available - pushCount)}
+                    {isOverLimit ? '  ⚠️' : `  残${Math.max(0, available - pushCount)}`}
                 </Text>
             </TouchableOpacity>
         </View>

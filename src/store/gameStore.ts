@@ -97,10 +97,18 @@ function rebuildPushStateFromHistory(
     players: Player[],
     history: HoleResult[],
     settings: GameState['settings'],
-): { players: Player[]; pushUsed: Record<PlayerId, number>; pushBonus: Record<PlayerId, number> } {
+): {
+    players: Player[];
+    pushUsed: Record<PlayerId, number>;
+    pushBonus: Record<PlayerId, number>;
+    pushUsedFront9: Record<PlayerId, number>;
+    pushBonusFront9: Record<PlayerId, number>;
+} {
     const sortedHistory = [...history].sort((a, b) => a.holeNumber - b.holeNumber);
     let pushUsed: Record<PlayerId, number> = {};
     let pushBonus: Record<PlayerId, number> = {};
+    let pushUsedFront9: Record<PlayerId, number> = {};
+    let pushBonusFront9: Record<PlayerId, number> = {};
 
     const rebuiltPlayers = players.map(p => ({
         ...p,
@@ -110,6 +118,8 @@ function rebuildPushStateFromHistory(
     for (const p of rebuiltPlayers) {
         pushUsed[p.id] = 0;
         pushBonus[p.id] = 0;
+        pushUsedFront9[p.id] = 0;
+        pushBonusFront9[p.id] = 0;
     }
 
     for (const hole of sortedHistory) {
@@ -131,11 +141,6 @@ function rebuildPushStateFromHistory(
             }
         }
 
-        if (hole.holeNumber === 9) {
-            pushUsed = Object.fromEntries(Object.keys(pushUsed).map(id => [id, 0]));
-            pushBonus = Object.fromEntries(Object.keys(pushBonus).map(id => [id, 0]));
-        }
-
         if (settings.birdyPushRecovery) {
             for (const id of [...hole.teamA_Ids, ...hole.teamB_Ids]) {
                 if (id === BOGEY_KUN_ID) continue;
@@ -145,9 +150,17 @@ function rebuildPushStateFromHistory(
                 }
             }
         }
+
+        if (hole.holeNumber === 9) {
+            // 前半終了時点のスナップショットを保存してからリセット
+            pushUsedFront9 = { ...pushUsed };
+            pushBonusFront9 = { ...pushBonus };
+            pushUsed = Object.fromEntries(Object.keys(pushUsed).map(id => [id, 0]));
+            pushBonus = Object.fromEntries(Object.keys(pushBonus).map(id => [id, 0]));
+        }
     }
 
-    return { players: rebuiltPlayers, pushUsed, pushBonus };
+    return { players: rebuiltPlayers, pushUsed, pushBonus, pushUsedFront9, pushBonusFront9 };
 }
 
 // ─── アクション型定義 ──────────────────────────────────────────────────
@@ -235,6 +248,8 @@ const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
     playerRanking: [],
     pushUsed: {},
     pushBonus: {},
+    pushUsedFront9: {},
+    pushBonusFront9: {},
     cloudRoundId: null,
 };
 
@@ -346,6 +361,8 @@ export const useGameStore = create<GameStore>()(
                     playerRanking: fullRanking,
                     pushUsed: rebuiltPushState.pushUsed,
                     pushBonus: rebuiltPushState.pushBonus,
+                    pushUsedFront9: rebuiltPushState.pushUsedFront9,
+                    pushBonusFront9: rebuiltPushState.pushBonusFront9,
                 });
             },
 
@@ -418,7 +435,12 @@ export const useGameStore = create<GameStore>()(
             // ── プッシュ残り回数取得 ─────────────────────────────────
             getRemainingPushForPlayer: (id) => {
                 if (id === BOGEY_KUN_ID) return 0;
-                const { settings, pushUsed, pushBonus } = get();
+                const { settings, pushUsed, pushBonus, pushUsedFront9, pushBonusFront9, currentHole } = get();
+                const isFront9 = currentHole <= 9;
+                // 前半ホール表示中かつホール9完了済み（front9スナップショットあり）の場合は前半データを使用
+                if (isFront9 && Object.keys(pushUsedFront9).length > 0) {
+                    return getRemainingPush(id, settings.maxPushCountPerHalf, pushUsedFront9, pushBonusFront9);
+                }
                 return getRemainingPush(id, settings.maxPushCountPerHalf, pushUsed, pushBonus);
             },
 
@@ -436,6 +458,8 @@ export const useGameStore = create<GameStore>()(
                     players: rebuiltPushState.players,
                     pushUsed: rebuiltPushState.pushUsed,
                     pushBonus: rebuiltPushState.pushBonus,
+                    pushUsedFront9: rebuiltPushState.pushUsedFront9,
+                    pushBonusFront9: rebuiltPushState.pushBonusFront9,
                     nextHoleMultiplier: restoredMultiplier,
                 });
             },
@@ -485,6 +509,8 @@ export const useGameStore = create<GameStore>()(
                     playerRanking: [],
                     pushUsed: initialPushUsed,
                     pushBonus: initialPushBonus,
+                    pushUsedFront9: {},
+                    pushBonusFront9: {},
                 });
             },
 
@@ -733,6 +759,8 @@ export const useGameStore = create<GameStore>()(
                 playerRanking: state.playerRanking,
                 pushUsed: state.pushUsed,
                 pushBonus: state.pushBonus,
+                pushUsedFront9: state.pushUsedFront9,
+                pushBonusFront9: state.pushBonusFront9,
                 cloudRoundId: state.cloudRoundId,
             }),
             // 破損データのフォールバック
@@ -745,6 +773,8 @@ export const useGameStore = create<GameStore>()(
                     if (!state.playerRanking) state.playerRanking = [];
                     if (!state.pushUsed) state.pushUsed = {};
                     if (!state.pushBonus) state.pushBonus = {};
+                    if (!state.pushUsedFront9) state.pushUsedFront9 = {};
+                    if (!state.pushBonusFront9) state.pushBonusFront9 = {};
                     if (!state.pendingCloudSaves) state.pendingCloudSaves = [];
                     if (state.cloudRoundId === undefined) state.cloudRoundId = null;
                     if (state.settings && !('playerCount' in state.settings)) {

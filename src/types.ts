@@ -141,6 +141,10 @@ export interface GameState {
   pushUsed: Record<PlayerId, number>;
   // プレイヤーID → バーディー復活による追加プッシュ権利
   pushBonus: Record<PlayerId, number>;
+  // プレイヤーID → 前半（ホール1〜9）の確定済みプッシュ使用回数（ホール9完了後に確定）
+  pushUsedFront9: Record<PlayerId, number>;
+  // プレイヤーID → 前半のバーディーボーナス（同上）
+  pushBonusFront9: Record<PlayerId, number>;
   // クラウド保存時の Supabase ラウンド ID（ゲスト時は null）
   cloudRoundId: string | null;
 }

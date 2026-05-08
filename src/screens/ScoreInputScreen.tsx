@@ -8,6 +8,7 @@ import { LivePreviewPanel } from '../components/score-input/LivePreviewPanel';
 import { ParSelectDialog } from '../components/score-input/ParSelectDialog';
 import { PlayerScoreCard } from '../components/score-input/PlayerScoreCard';
 import { ResultSummaryDialog } from '../components/score-input/ResultSummaryDialog';
+import { BottomTabBar, BottomTab } from '../components/shared/BottomTabBar';
 import { HistoryDialog } from '../components/shared/HistoryDialog';
 import { ScorecardDialog } from '../components/shared/ScorecardDialog';
 import { C } from '../theme/colors';
@@ -46,6 +47,7 @@ export const ScoreInputScreen = () => {
 
     const [editRate, setEditRate] = useState(settings.rate.toString());
     const [editPushLimit, setEditPushLimit] = useState(settings.maxPushCountPerHalf.toString());
+    const [activeTab, setActiveTab] = useState<BottomTab>('hole');
 
     useEffect(() => {
         bgScrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -74,12 +76,23 @@ export const ScoreInputScreen = () => {
             setPar(null);
             setScores({});
             setBirdieFlags({});
-            setPushCounts({});
             const { teamA, teamB } = getRecommendedPairs(currentHole);
             const newAssignments: Record<PlayerId, 'A' | 'B'> = {};
             teamA.forEach(id => { newAssignments[id] = 'A'; });
             teamB.forEach(id => { newAssignments[id] = 'B'; });
             setTeamAssignments(newAssignments);
+
+            // ハーフ最終ホール（9番・18番）は残りプッシュを自動消費
+            if (currentHole === 9 || currentHole === 18) {
+                const autoPush: Record<PlayerId, number> = {};
+                players.forEach(p => {
+                    const remaining = getRemainingPushForPlayer(p.id);
+                    if (remaining > 0) autoPush[p.id] = remaining;
+                });
+                setPushCounts(autoPush);
+            } else {
+                setPushCounts({});
+            }
         }
 
         setEditRate(settings.rate.toString());
@@ -136,12 +149,9 @@ export const ScoreInputScreen = () => {
     };
 
     const cyclePush = (id: PlayerId) => {
-        const player = players.find(p => p.id === id);
-        if (!player) return;
+        const PUSH_MAX = 10;
         const current = pushCounts[id] || 0;
-        const available = Math.max(0, getRemainingPushForPlayer(id));
-        if (available === 0) return;
-        const next = current + 1 > available ? 0 : current + 1;
+        const next = current >= PUSH_MAX ? 0 : current + 1;
         setPushCounts(prev => ({ ...prev, [id]: next }));
     };
 
@@ -250,6 +260,13 @@ export const ScoreInputScreen = () => {
         alertSaveResult(result);
     };
 
+    const handleTabChange = (tab: BottomTab) => {
+        setActiveTab(tab);
+        if (tab === 'scorecard') setIsScorecardVisible(true);
+        else if (tab === 'history') setIsHistoryVisible(true);
+        else if (tab === 'settings') setIsSettingsVisible(true);
+    };
+
     const handleResetHole = () => {
         const doReset = () => {
             resetHole(currentHole);
@@ -305,28 +322,11 @@ export const ScoreInputScreen = () => {
                 isFront9={isFront9}
                 canGoPrev={currentHole > 1}
                 canGoNext={isEditingExisting}
-                language={settings.language}
                 history={history}
                 onPrevHole={() => goToHole(currentHole - 1)}
                 onNextHole={() => goToHole(currentHole + 1)}
                 onParPress={() => setIsParDialogVisible(true)}
-                onSettingsPress={() => setIsSettingsVisible(true)}
                 onHelpPress={() => setIsHelpVisible(true)}
-                onRestartPress={() => {
-                    if (Platform.OS === 'web') {
-                        if (window.confirm(t('common.confirmReset'))) {
-                            useGameStore.getState().resetGame();
-                        }
-                    } else {
-                        Alert.alert(t('common.restart'), t('common.confirmReset'), [
-                            { text: t('common.cancel'), style: 'cancel' },
-                            { text: t('common.ok'), onPress: () => { useGameStore.getState().resetGame(); } },
-                        ]);
-                    }
-                }}
-                onScorecardPress={() => setIsScorecardVisible(true)}
-                onHistoryPress={() => setIsHistoryVisible(true)}
-                onLanguageToggle={() => setLanguage(settings.language === 'en' ? 'ja' : 'en')}
             />
 
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -432,6 +432,8 @@ export const ScoreInputScreen = () => {
                 </View>
             </KeyboardAvoidingView>
 
+            <BottomTabBar activeTab={activeTab} onChange={handleTabChange} />
+
             <ParSelectDialog
                 visible={isParDialogVisible}
                 onSelect={p => { setPar(p); setIsParDialogVisible(false); }}
@@ -443,6 +445,7 @@ export const ScoreInputScreen = () => {
                 history={history}
                 players={players}
                 getPlayerTotalScore={getPlayerTotalScore}
+                rate={settings.rate}
             />
 
             <HistoryDialog
@@ -492,11 +495,36 @@ export const ScoreInputScreen = () => {
                         <Text style={{ marginBottom: 10 }}>{settings.matchName}</Text>
                         <TextInput label={t('common.rate')} value={editRate} onChangeText={setEditRate} keyboardType="numeric" style={{ marginBottom: 12 }} />
                         <TextInput label={t('common.pushLimit')} value={editPushLimit} onChangeText={setEditPushLimit} keyboardType="numeric" />
+                        <Button
+                            mode="outlined"
+                            style={{ marginTop: 16 }}
+                            onPress={() => setLanguage(settings.language === 'en' ? 'ja' : 'en')}
+                        >
+                            {settings.language === 'en' ? '日本語に切替' : 'Switch to English'}
+                        </Button>
+                        <Button
+                            mode="outlined"
+                            style={{ marginTop: 8 }}
+                            onPress={() => {
+                                setIsSettingsVisible(false);
+                                const doReset = () => useGameStore.getState().resetGame();
+                                if (Platform.OS === 'web') {
+                                    if (window.confirm(t('common.confirmReset'))) doReset();
+                                } else {
+                                    Alert.alert(t('common.restart'), t('common.confirmReset'), [
+                                        { text: t('common.cancel'), style: 'cancel' },
+                                        { text: t('common.ok'), onPress: doReset },
+                                    ]);
+                                }
+                            }}
+                        >
+                            {t('common.restart')}
+                        </Button>
                         {user && (
                             <Button
                                 mode="outlined"
                                 icon="logout"
-                                style={{ marginTop: 16 }}
+                                style={{ marginTop: 8 }}
                                 onPress={() => {
                                     setIsSettingsVisible(false);
                                     signOut();

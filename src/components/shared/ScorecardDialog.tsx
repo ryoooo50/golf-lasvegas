@@ -1,7 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native';
-import { Button, DataTable, Dialog, Portal } from 'react-native-paper';
+import { Button, DataTable, Dialog, Portal, Text } from 'react-native-paper';
+import { C } from '../../theme/colors';
 import { HoleResult, Player, PlayerId } from '../../types';
 
 interface ScorecardDialogProps {
@@ -10,10 +12,11 @@ interface ScorecardDialogProps {
     history: HoleResult[];
     players: Player[];
     getPlayerTotalScore: (id: PlayerId) => number;
+    rate: number;
 }
 
 export const ScorecardDialog: React.FC<ScorecardDialogProps> = ({
-    visible, onDismiss, history, players, getPlayerTotalScore
+    visible, onDismiss, history, players, getPlayerTotalScore, rate
 }) => {
     const { t } = useTranslation();
 
@@ -61,11 +64,24 @@ export const ScorecardDialog: React.FC<ScorecardDialogProps> = ({
                                         <DataTable.Cell style={{ width: 40 }}>計</DataTable.Cell>
                                         <DataTable.Cell style={{ width: 40 }}>{''}</DataTable.Cell>
                                         <DataTable.Cell style={{ width: 40 }}>{''}</DataTable.Cell>
-                                        {players.map(p => (
-                                            <DataTable.Cell key={p.id} style={{ width: 90 }} numeric>
-                                                {getPlayerTotalScore(p.id)}
-                                            </DataTable.Cell>
-                                        ))}
+                                        {players.map(p => {
+                                            const total = getPlayerTotalScore(p.id);
+                                            const yen = total * rate;
+                                            const ptColor = total > 0 ? C.greenDeep : total < 0 ? C.coralDeep : C.ink3;
+                                            const yenColor = yen > 0 ? C.greenPrimary : yen < 0 ? C.coralPrimary : C.ink3;
+                                            return (
+                                                <DataTable.Cell key={p.id} style={{ width: 90 }} numeric>
+                                                    <View style={styles.totalCell}>
+                                                        <Text style={[styles.totalPt, { color: ptColor }]}>
+                                                            {total > 0 ? `+${total}` : `${total}`}pt
+                                                        </Text>
+                                                        <Text style={[styles.totalYen, { color: yenColor }]}>
+                                                            ¥{yen.toLocaleString()}
+                                                        </Text>
+                                                    </View>
+                                                </DataTable.Cell>
+                                            );
+                                        })}
                                     </DataTable.Row>
                                 )}
                             </DataTable>
@@ -79,3 +95,9 @@ export const ScorecardDialog: React.FC<ScorecardDialogProps> = ({
         </Portal>
     );
 };
+
+const styles = StyleSheet.create({
+    totalCell: { alignItems: 'flex-end' },
+    totalPt: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
+    totalYen: { fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
+});

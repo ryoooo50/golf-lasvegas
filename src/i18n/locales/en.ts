@@ -67,6 +67,7 @@ export default {
             pushMult: "PUSH +{{n}}",
             carryMult: "CARRY +{{n}}",
             resetHole: "Reset This Hole",
+            holeTab: "Hole",
         },
         setup: {
             playerCount: "Players",

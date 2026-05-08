@@ -13,23 +13,16 @@ interface HoleHeaderProps {
     isFront9: boolean;
     canGoPrev: boolean;
     canGoNext: boolean;
-    language: 'en' | 'ja';
     history: HoleResult[];
     onPrevHole: () => void;
     onNextHole: () => void;
     onParPress: () => void;
-    onSettingsPress: () => void;
     onHelpPress: () => void;
-    onRestartPress: () => void;
-    onScorecardPress: () => void;
-    onHistoryPress: () => void;
-    onLanguageToggle: () => void;
 }
 
 export const HoleHeader: React.FC<HoleHeaderProps> = ({
-    currentHole, par, liveMultiplier, isFront9, canGoPrev, canGoNext, language, history,
-    onPrevHole, onNextHole, onParPress, onSettingsPress, onHelpPress,
-    onRestartPress, onScorecardPress, onHistoryPress, onLanguageToggle,
+    currentHole, par, liveMultiplier, isFront9, canGoPrev, canGoNext, history,
+    onPrevHole, onNextHole, onParPress, onHelpPress,
 }) => {
     const { t } = useTranslation();
     const completedHoles = history.length;
@@ -37,30 +30,11 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
 
     return (
         <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-            {/* ツールバー */}
-            <View style={styles.toolbar}>
-                <View style={styles.toolRow}>
-                    <TouchableOpacity onPress={onHelpPress} style={styles.toolBtn}>
-                        <Text style={styles.toolBtnText}>?</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onSettingsPress} style={styles.toolBtn}>
-                        <Text style={styles.toolBtnText}>⚙</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onRestartPress} style={styles.toolBtn}>
-                        <Text style={styles.toolBtnText}>{t('common.restart').toUpperCase()}</Text>
-                    </TouchableOpacity>
-                </View>
-                <View style={styles.toolRow}>
-                    <TouchableOpacity onPress={onScorecardPress} style={styles.toolBtn}>
-                        <Text style={styles.toolBtnText}>{t('common.scorecard').toUpperCase()}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onHistoryPress} style={styles.toolBtn}>
-                        <Text style={styles.toolBtnText}>{t('common.viewHistory').toUpperCase()}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onLanguageToggle} style={styles.toolBtn}>
-                        <Text style={[styles.toolBtnText, { fontWeight: '700' }]}>{language.toUpperCase()}</Text>
-                    </TouchableOpacity>
-                </View>
+            {/* ヘルプボタン（右上） */}
+            <View style={styles.helpRow}>
+                <TouchableOpacity onPress={onHelpPress} style={styles.toolBtn}>
+                    <Text style={styles.toolBtnText}>?</Text>
+                </TouchableOpacity>
             </View>
 
             {/* ホールナビゲーション */}
@@ -129,13 +103,12 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
 
 const styles = StyleSheet.create({
     safeArea: { backgroundColor: C.dark },
-    toolbar: {
+    helpRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         paddingHorizontal: 12,
         paddingTop: 4,
     },
-    toolRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     toolBtn: { padding: 5 },
     toolBtnText: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },
 
