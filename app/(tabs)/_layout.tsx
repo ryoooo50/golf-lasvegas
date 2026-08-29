@@ -5,6 +5,9 @@ export default function TabLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="scorecard" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+      <Stack.Screen name="history" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+      <Stack.Screen name="settings" options={{ presentation: 'card', animation: 'slide_from_right' }} />
     </Stack>
   );
 }

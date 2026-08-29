@@ -124,7 +124,8 @@ export interface GameState {
     language: 'en' | 'ja';
     matchName: string;
     playerCount: 3 | 4;        // 3人 or 4人モード
-    birdyPushRecovery: boolean; // バーディーでプッシュ権利+1復活オプション
+    pushRecoveryOnBirdie: number; // バーディーで復活するプッシュ権利数（0で無効、デフォルト1）
+    pushRecoveryOnEagle: number;  // イーグル以下で復活するプッシュ権利数（0で無効、デフォルト2）
   };
 
   // Saved Rounds
@@ -161,7 +162,8 @@ export interface PendingCloudSave {
     player_count: number;
     player_names: Record<string, string>;
     push_limit: number;
-    birdy_push_recovery: boolean;
+    push_recovery_on_birdie: number;
+    push_recovery_on_eagle: number;
     holes: unknown;
     total_points: Record<string, number>;
   };

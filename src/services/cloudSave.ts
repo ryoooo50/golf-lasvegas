@@ -7,7 +7,8 @@ export interface RoundSaveData {
   player_count: number;
   player_names: Record<string, string>;  // { playerId: name }
   push_limit: number;
-  birdy_push_recovery: boolean;
+  push_recovery_on_birdie: number;
+  push_recovery_on_eagle: number;
   holes: unknown;                         // HoleResult[] を JSON で保存
   total_points: Record<string, number>;  // { playerId: totalPoints }
 }

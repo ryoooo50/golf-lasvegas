@@ -87,7 +87,8 @@ function buildRoundSaveData(
         player_count: settings.playerCount,
         player_names: playerNames,
         push_limit: settings.maxPushCountPerHalf,
-        birdy_push_recovery: settings.birdyPushRecovery,
+        push_recovery_on_birdie: settings.pushRecoveryOnBirdie,
+        push_recovery_on_eagle: settings.pushRecoveryOnEagle,
         holes: history,
         total_points: totalPoints,
     };
@@ -141,13 +142,13 @@ function rebuildPushStateFromHistory(
             }
         }
 
-        if (settings.birdyPushRecovery) {
-            for (const id of [...hole.teamA_Ids, ...hole.teamB_Ids]) {
-                if (id === BOGEY_KUN_ID) continue;
-                const score = hole.scores[id];
-                if (score?.isBirdie || score?.isEagle) {
-                    pushBonus[id] = (pushBonus[id] ?? 0) + 1;
-                }
+        for (const id of [...hole.teamA_Ids, ...hole.teamB_Ids]) {
+            if (id === BOGEY_KUN_ID) continue;
+            const score = hole.scores[id];
+            if (score?.isEagle) {
+                pushBonus[id] = (pushBonus[id] ?? 0) + settings.pushRecoveryOnEagle;
+            } else if (score?.isBirdie) {
+                pushBonus[id] = (pushBonus[id] ?? 0) + settings.pushRecoveryOnBirdie;
             }
         }
 
@@ -190,13 +191,13 @@ function buildPushStateForHoleHalf(
             pushUsed[id] = (pushUsed[id] ?? 0) + (hole.scores[id]?.pushCount ?? 0);
         }
 
-        if (settings.birdyPushRecovery) {
-            for (const id of [...hole.teamA_Ids, ...hole.teamB_Ids]) {
-                if (id === BOGEY_KUN_ID) continue;
-                const score = hole.scores[id];
-                if (score?.isBirdie || score?.isEagle) {
-                    pushBonus[id] = (pushBonus[id] ?? 0) + 1;
-                }
+        for (const id of [...hole.teamA_Ids, ...hole.teamB_Ids]) {
+            if (id === BOGEY_KUN_ID) continue;
+            const score = hole.scores[id];
+            if (score?.isEagle) {
+                pushBonus[id] = (pushBonus[id] ?? 0) + settings.pushRecoveryOnEagle;
+            } else if (score?.isBirdie) {
+                pushBonus[id] = (pushBonus[id] ?? 0) + settings.pushRecoveryOnBirdie;
             }
         }
     }
@@ -281,7 +282,8 @@ const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
         language: 'ja',
         matchName: '',
         playerCount: 4,
-        birdyPushRecovery: false,
+        pushRecoveryOnBirdie: 1,
+        pushRecoveryOnEagle: 2,
     },
     savedRounds: [],
     pendingCloudSaves: [],
@@ -813,8 +815,12 @@ export const useGameStore = create<GameStore>()(
                     if (state.settings && !('playerCount' in state.settings)) {
                         (state.settings as GameState['settings']).playerCount = 4;
                     }
-                    if (state.settings && !('birdyPushRecovery' in state.settings)) {
-                        (state.settings as GameState['settings']).birdyPushRecovery = false;
+                    if (state.settings && !('pushRecoveryOnBirdie' in state.settings)) {
+                        const legacySettings = state.settings as GameState['settings'] & { birdyPushRecovery?: boolean };
+                        const legacyEnabled = legacySettings.birdyPushRecovery ?? false;
+                        legacySettings.pushRecoveryOnBirdie = legacyEnabled ? 1 : 0;
+                        legacySettings.pushRecoveryOnEagle = legacyEnabled ? 2 : 0;
+                        delete legacySettings.birdyPushRecovery;
                     }
                 }
             },

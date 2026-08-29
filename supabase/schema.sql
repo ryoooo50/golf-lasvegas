@@ -9,7 +9,8 @@ create table public.rounds (
   player_count integer not null default 4,
   player_names jsonb not null default '{}',
   push_limit integer not null default 2,
-  birdy_push_recovery boolean not null default false,
+  push_recovery_on_birdie integer not null default 1,
+  push_recovery_on_eagle integer not null default 2,
   holes jsonb not null default '[]',
   total_points jsonb not null default '{}'
 );

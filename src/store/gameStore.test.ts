@@ -134,13 +134,37 @@ describe('push limits by half', () => {
     });
 
     test('does not carry birdie push recovery bonuses across halves', () => {
-        useGameStore.getState().updateSettings({ birdyPushRecovery: true });
+        useGameStore.getState().updateSettings({ pushRecoveryOnBirdie: 1, pushRecoveryOnEagle: 2 });
 
         completeTestHole(1, { p1: { score: 3, isBirdie: true } });
 
         expect(useGameStore.getState().getRemainingPushForPlayer('p1')).toBe(3);
 
         useGameStore.getState().goToHole(10);
+
+        expect(useGameStore.getState().getRemainingPushForPlayer('p1')).toBe(2);
+    });
+
+    test('recovers the configured eagle amount instead of the birdie amount when a player scores an eagle', () => {
+        useGameStore.getState().updateSettings({ pushRecoveryOnBirdie: 1, pushRecoveryOnEagle: 2 });
+
+        completeTestHole(1, { p1: { score: 2, isBirdie: true, isEagle: true } });
+
+        expect(useGameStore.getState().getRemainingPushForPlayer('p1')).toBe(4);
+    });
+
+    test('respects custom recovery amounts', () => {
+        useGameStore.getState().updateSettings({ pushRecoveryOnBirdie: 3, pushRecoveryOnEagle: 5 });
+
+        completeTestHole(1, { p1: { score: 3, isBirdie: true } });
+
+        expect(useGameStore.getState().getRemainingPushForPlayer('p1')).toBe(5);
+    });
+
+    test('does not grant recovery when the configured amount is 0', () => {
+        useGameStore.getState().updateSettings({ pushRecoveryOnBirdie: 0, pushRecoveryOnEagle: 0 });
+
+        completeTestHole(1, { p1: { score: 2, isBirdie: true, isEagle: true } });
 
         expect(useGameStore.getState().getRemainingPushForPlayer('p1')).toBe(2);
     });

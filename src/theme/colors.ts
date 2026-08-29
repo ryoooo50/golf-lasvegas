@@ -1,6 +1,7 @@
 export const C = {
     bg: '#f4f5f2',
     surface: '#ffffff',
+    surface2: '#fafaf7',
     ink: '#0f1410',
     ink2: '#2a2f2c',
     ink3: '#5b6360',

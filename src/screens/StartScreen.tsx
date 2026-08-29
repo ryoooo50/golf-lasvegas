@@ -1,11 +1,11 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, RadioButton, Switch, Text, TextInput } from 'react-native-paper';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Button, RadioButton, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlayerNamesForm } from '../components/shared/PlayerNamesForm';
-import { HistoryDialog } from '../components/shared/HistoryDialog';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import { Player } from '../types';
@@ -15,9 +15,9 @@ const BG_IMAGE = require('../../assets/images/icon.png');
 const DEFAULT_PLAYER_NAMES = ['Player 1', 'Player 2', 'Player 3', 'Player 4'];
 
 export const StartScreen = () => {
-    const { startGame, updateSettings, updatePlayerName, settings, players, savedRounds, resumeRound } =
+    const router = useRouter();
+    const { startGame, updateSettings, updatePlayerName, settings, players } =
         useGameStore();
-    const deleteSavedRound = useGameStore((state) => state.deleteSavedRound);
     const { signOut, user } = useAuthStore();
     const { t } = useTranslation();
 
@@ -26,7 +26,8 @@ export const StartScreen = () => {
     const [rate, setRate] = useState((settings.rate ?? 10).toString());
     const [playerCount, setPlayerCount] = useState<3 | 4>(settings.playerCount ?? 4);
     const [pushLimit, setPushLimit] = useState(settings.maxPushCountPerHalf ?? 2);
-    const [birdyPushRecovery, setBirdyPushRecovery] = useState(settings.birdyPushRecovery ?? false);
+    const [pushRecoveryOnBirdie, setPushRecoveryOnBirdie] = useState(settings.pushRecoveryOnBirdie ?? 1);
+    const [pushRecoveryOnEagle, setPushRecoveryOnEagle] = useState(settings.pushRecoveryOnEagle ?? 2);
     const [startCourse, setStartCourse] = useState<'OUT' | 'IN'>('OUT');
     const [playerNames, setPlayerNames] = useState<string[]>([
         players[0]?.name ?? DEFAULT_PLAYER_NAMES[0],
@@ -34,7 +35,6 @@ export const StartScreen = () => {
         players[2]?.name ?? DEFAULT_PLAYER_NAMES[2],
         players[3]?.name ?? DEFAULT_PLAYER_NAMES[3],
     ]);
-    const [isHistoryVisible, setIsHistoryVisible] = useState(false);
 
     const handlePlayerNameChange = (index: number, value: string) => {
         setPlayerNames((prev) => {
@@ -72,7 +72,8 @@ export const StartScreen = () => {
             rate: isNaN(parsedRate) ? 10 : parsedRate,
             maxPushCountPerHalf: pushLimit,
             playerCount,
-            birdyPushRecovery,
+            pushRecoveryOnBirdie,
+            pushRecoveryOnEagle,
         });
 
         // Apply player names directly via store
@@ -89,22 +90,10 @@ export const StartScreen = () => {
 
     const decrementPushLimit = () => setPushLimit((v) => Math.max(0, v - 1));
     const incrementPushLimit = () => setPushLimit((v) => Math.min(5, v + 1));
-
-    const handleDeleteRound = (roundId: string) => {
-        Alert.alert(t('common.delete'), t('common.confirmDeleteRound'), [
-            { text: t('common.cancel'), style: 'cancel' },
-            {
-                text: t('common.delete'),
-                style: 'destructive',
-                onPress: async () => {
-                    const result = await deleteSavedRound(roundId);
-                    if (result.cloudStatus === 'queued') {
-                        Alert.alert(t('common.deletedLocalCloudQueued'));
-                    }
-                },
-            },
-        ]);
-    };
+    const decrementBirdieRecovery = () => setPushRecoveryOnBirdie((v) => Math.max(0, v - 1));
+    const incrementBirdieRecovery = () => setPushRecoveryOnBirdie((v) => Math.min(5, v + 1));
+    const decrementEagleRecovery = () => setPushRecoveryOnEagle((v) => Math.max(0, v - 1));
+    const incrementEagleRecovery = () => setPushRecoveryOnEagle((v) => Math.min(5, v + 1));
 
     return (
         <View style={styles.container}>
@@ -189,14 +178,52 @@ export const StartScreen = () => {
                             </Button>
                         </View>
 
-                        {/* Birdy Push Recovery */}
-                        <View style={styles.toggleRow}>
-                            <Text style={styles.toggleLabel}>{t('setup.birdyPushRecovery')}</Text>
-                            <Switch
-                                value={birdyPushRecovery}
-                                onValueChange={setBirdyPushRecovery}
-                                accessibilityLabel={t('setup.birdyPushRecovery')}
-                            />
+                        {/* Push Recovery on Birdie */}
+                        <Text style={styles.fieldLabel}>{t('setup.pushRecoveryBirdieLabel')}</Text>
+                        <View style={styles.stepperRow}>
+                            <Button
+                                mode="outlined"
+                                compact
+                                onPress={decrementBirdieRecovery}
+                                style={styles.stepperBtn}
+                                accessibilityLabel={t('setup.pushRecoveryBirdieLabel')}
+                            >
+                                −
+                            </Button>
+                            <Text style={styles.stepperValue}>{pushRecoveryOnBirdie}</Text>
+                            <Button
+                                mode="outlined"
+                                compact
+                                onPress={incrementBirdieRecovery}
+                                style={styles.stepperBtn}
+                                accessibilityLabel={t('setup.pushRecoveryBirdieLabel')}
+                            >
+                                ＋
+                            </Button>
+                        </View>
+
+                        {/* Push Recovery on Eagle */}
+                        <Text style={styles.fieldLabel}>{t('setup.pushRecoveryEagleLabel')}</Text>
+                        <View style={styles.stepperRow}>
+                            <Button
+                                mode="outlined"
+                                compact
+                                onPress={decrementEagleRecovery}
+                                style={styles.stepperBtn}
+                                accessibilityLabel={t('setup.pushRecoveryEagleLabel')}
+                            >
+                                −
+                            </Button>
+                            <Text style={styles.stepperValue}>{pushRecoveryOnEagle}</Text>
+                            <Button
+                                mode="outlined"
+                                compact
+                                onPress={incrementEagleRecovery}
+                                style={styles.stepperBtn}
+                                accessibilityLabel={t('setup.pushRecoveryEagleLabel')}
+                            >
+                                ＋
+                            </Button>
                         </View>
 
                         {/* Player Names */}
@@ -247,7 +274,7 @@ export const StartScreen = () => {
                         mode="contained-tonal"
                         icon="history"
                         style={styles.historyButton}
-                        onPress={() => setIsHistoryVisible(true)}
+                        onPress={() => router.push('/history')}
                     >
                         {t('common.viewHistory')}
                     </Button>
@@ -265,14 +292,6 @@ export const StartScreen = () => {
 
                 <Text style={styles.footer}>© 2024 Golf LasVegas</Text>
             </SafeAreaView>
-
-            <HistoryDialog
-                visible={isHistoryVisible}
-                onDismiss={() => setIsHistoryVisible(false)}
-                savedRounds={savedRounds}
-                onResume={(roundId) => resumeRound(roundId)}
-                onDelete={handleDeleteRound}
-            />
         </View>
     );
 };

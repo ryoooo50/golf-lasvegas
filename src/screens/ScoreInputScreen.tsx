@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,23 +9,19 @@ import { LivePreviewPanel } from '../components/score-input/LivePreviewPanel';
 import { ParSelectDialog } from '../components/score-input/ParSelectDialog';
 import { PlayerScoreCard } from '../components/score-input/PlayerScoreCard';
 import { ResultSummaryDialog } from '../components/score-input/ResultSummaryDialog';
-import { BottomTabBar, BottomTab } from '../components/shared/BottomTabBar';
-import { HistoryDialog } from '../components/shared/HistoryDialog';
-import { ScorecardDialog } from '../components/shared/ScorecardDialog';
+import { BottomTabBar } from '../components/shared/BottomTabBar';
 import { C } from '../theme/colors';
 import { useGameStore } from '../store/gameStore';
-import { useAuthStore } from '../store/authStore';
 import { CalculationBreakdown, PlayerId, ScoreInput } from '../types';
 import { calculateLivePreview } from '../utils/golfLogic';
 
 export const ScoreInputScreen = () => {
+    const router = useRouter();
     const {
         players, currentHole, nextHoleMultiplier, completeHole, settings,
-        setLanguage, getRecommendedPairs, getPlayerTotalScore, updatePlayerName,
-        getRemainingPushForPlayer, goToHole, resetHole, history, updateSettings, saveCurrentRound, savedRounds, resumeRound,
+        getRecommendedPairs, getPlayerTotalScore, updatePlayerName,
+        getRemainingPushForPlayer, goToHole, resetHole, history, saveCurrentRound,
     } = useGameStore();
-    const deleteSavedRound = useGameStore((state) => state.deleteSavedRound);
-    const { signOut, user } = useAuthStore();
     const { t } = useTranslation();
     const bgScrollRef = useRef<ScrollView>(null);
 
@@ -39,15 +36,9 @@ export const ScoreInputScreen = () => {
     const [editingPlayerId, setEditingPlayerId] = useState<PlayerId | null>(null);
     const [editingName, setEditingName] = useState('');
     const [isHelpVisible, setIsHelpVisible] = useState(false);
-    const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-    const [isScorecardVisible, setIsScorecardVisible] = useState(false);
-    const [isHistoryVisible, setIsHistoryVisible] = useState(false);
     const [resultBreakdown, setResultBreakdown] = useState<CalculationBreakdown | null>(null);
     const [isResultVisible, setIsResultVisible] = useState(false);
 
-    const [editRate, setEditRate] = useState(settings.rate.toString());
-    const [editPushLimit, setEditPushLimit] = useState(settings.maxPushCountPerHalf.toString());
-    const [activeTab, setActiveTab] = useState<BottomTab>('hole');
     const [pendingTeamChange, setPendingTeamChange] = useState<{ id: PlayerId; newTeam: 'A' | 'B' } | null>(null);
 
     useEffect(() => {
@@ -95,10 +86,7 @@ export const ScoreInputScreen = () => {
                 setPushCounts({});
             }
         }
-
-        setEditRate(settings.rate.toString());
-        setEditPushLimit(settings.maxPushCountPerHalf.toString());
-    }, [currentHole, history, getRecommendedPairs, settings.maxPushCountPerHalf, settings.rate]);
+    }, [currentHole, history, getRecommendedPairs]);
 
     useEffect(() => {
         if (par === null) setIsParDialogVisible(true);
@@ -181,12 +169,13 @@ export const ScoreInputScreen = () => {
     };
 
     const alertSaveResult = (result: Awaited<ReturnType<typeof saveCurrentRound>>) => {
+        const goToHistory = () => router.push('/history');
         if (result.cloudStatus === 'saved') {
-            Alert.alert(t('common.roundSaved'), t('auth.cloudSaved'), [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+            Alert.alert(t('common.roundSaved'), t('auth.cloudSaved'), [{ text: t('common.ok'), onPress: goToHistory }]);
         } else if (result.cloudStatus === 'queued') {
-            Alert.alert(t('common.roundSaved'), t('auth.cloudQueued'), [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+            Alert.alert(t('common.roundSaved'), t('auth.cloudQueued'), [{ text: t('common.ok'), onPress: goToHistory }]);
         } else {
-            Alert.alert(t('common.roundSaved'), '', [{ text: t('common.ok'), onPress: () => setIsHistoryVisible(true) }]);
+            Alert.alert(t('common.roundSaved'), '', [{ text: t('common.ok'), onPress: goToHistory }]);
         }
     };
 
@@ -262,11 +251,10 @@ export const ScoreInputScreen = () => {
         alertSaveResult(result);
     };
 
-    const handleTabChange = (tab: BottomTab) => {
-        setActiveTab(tab);
-        if (tab === 'scorecard') setIsScorecardVisible(true);
-        else if (tab === 'history') setIsHistoryVisible(true);
-        else if (tab === 'settings') setIsSettingsVisible(true);
+    const handleTabChange = (tab: 'hole' | 'scorecard' | 'history' | 'settings') => {
+        if (tab === 'scorecard') router.push('/scorecard');
+        else if (tab === 'history') router.push('/history');
+        else if (tab === 'settings') router.push('/settings');
     };
 
     const handleResetHole = () => {
@@ -284,22 +272,6 @@ export const ScoreInputScreen = () => {
                 { text: t('common.ok'), style: 'destructive', onPress: doReset },
             ]);
         }
-    };
-
-    const handleDeleteRound = (roundId: string) => {
-        Alert.alert(t('common.delete'), t('common.confirmDeleteRound'), [
-            { text: t('common.cancel'), style: 'cancel' },
-            {
-                text: t('common.delete'),
-                style: 'destructive',
-                onPress: async () => {
-                    const result = await deleteSavedRound(roundId);
-                    if (result.cloudStatus === 'queued') {
-                        Alert.alert(t('common.deletedLocalCloudQueued'));
-                    }
-                },
-            },
-        ]);
     };
 
     const openNameEditor = (id: PlayerId, name: string) => {
@@ -443,28 +415,11 @@ export const ScoreInputScreen = () => {
                 </View>
             </KeyboardAvoidingView>
 
-            <BottomTabBar activeTab={activeTab} onChange={handleTabChange} />
+            <BottomTabBar activeTab="hole" onChange={handleTabChange} />
 
             <ParSelectDialog
                 visible={isParDialogVisible}
                 onSelect={p => { setPar(p); setIsParDialogVisible(false); }}
-            />
-
-            <ScorecardDialog
-                visible={isScorecardVisible}
-                onDismiss={() => setIsScorecardVisible(false)}
-                history={history}
-                players={players}
-                getPlayerTotalScore={getPlayerTotalScore}
-                rate={settings.rate}
-            />
-
-            <HistoryDialog
-                visible={isHistoryVisible}
-                onDismiss={() => setIsHistoryVisible(false)}
-                savedRounds={savedRounds}
-                onResume={(roundId) => resumeRound(roundId)}
-                onDelete={handleDeleteRound}
             />
 
             <ResultSummaryDialog
@@ -497,60 +452,6 @@ export const ScoreInputScreen = () => {
                     </Dialog.ScrollArea>
                     <Dialog.Actions>
                         <Button onPress={() => setIsHelpVisible(false)}>{t('common.ok')}</Button>
-                    </Dialog.Actions>
-                </Dialog>
-
-                <Dialog visible={isSettingsVisible} onDismiss={() => setIsSettingsVisible(false)}>
-                    <Dialog.Title>{t('common.settings')}</Dialog.Title>
-                    <Dialog.Content>
-                        <Text style={{ marginBottom: 10 }}>{settings.matchName}</Text>
-                        <TextInput label={t('common.rate')} value={editRate} onChangeText={setEditRate} keyboardType="numeric" style={{ marginBottom: 12 }} />
-                        <TextInput label={t('common.pushLimit')} value={editPushLimit} onChangeText={setEditPushLimit} keyboardType="numeric" />
-                        <Button
-                            mode="outlined"
-                            style={{ marginTop: 16 }}
-                            onPress={() => setLanguage(settings.language === 'en' ? 'ja' : 'en')}
-                        >
-                            {settings.language === 'en' ? '日本語に切替' : 'Switch to English'}
-                        </Button>
-                        <Button
-                            mode="outlined"
-                            style={{ marginTop: 8 }}
-                            onPress={() => {
-                                setIsSettingsVisible(false);
-                                const doReset = () => useGameStore.getState().resetGame();
-                                if (Platform.OS === 'web') {
-                                    if (window.confirm(t('common.confirmReset'))) doReset();
-                                } else {
-                                    Alert.alert(t('common.restart'), t('common.confirmReset'), [
-                                        { text: t('common.cancel'), style: 'cancel' },
-                                        { text: t('common.ok'), onPress: doReset },
-                                    ]);
-                                }
-                            }}
-                        >
-                            {t('common.restart')}
-                        </Button>
-                        {user && (
-                            <Button
-                                mode="outlined"
-                                icon="logout"
-                                style={{ marginTop: 8 }}
-                                onPress={() => {
-                                    setIsSettingsVisible(false);
-                                    signOut();
-                                }}
-                            >
-                                {t('auth.logoutButton')}
-                            </Button>
-                        )}
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setIsSettingsVisible(false)}>{t('common.cancel')}</Button>
-                        <Button onPress={() => {
-                            updateSettings({ rate: parseInt(editRate, 10) || settings.rate, maxPushCountPerHalf: parseInt(editPushLimit, 10) || settings.maxPushCountPerHalf });
-                            setIsSettingsVisible(false);
-                        }}>{t('common.update')}</Button>
                     </Dialog.Actions>
                 </Dialog>
 
