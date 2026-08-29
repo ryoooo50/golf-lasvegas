@@ -163,6 +163,47 @@ function rebuildPushStateFromHistory(
     return { players: rebuiltPlayers, pushUsed, pushBonus, pushUsedFront9, pushBonusFront9 };
 }
 
+function buildPushStateForHoleHalf(
+    players: Player[],
+    history: HoleResult[],
+    settings: GameState['settings'],
+    holeNumber: number,
+): {
+    pushUsed: Record<PlayerId, number>;
+    pushBonus: Record<PlayerId, number>;
+} {
+    const isFront9 = holeNumber <= 9;
+    const pushUsed: Record<PlayerId, number> = {};
+    const pushBonus: Record<PlayerId, number> = {};
+
+    for (const p of players) {
+        pushUsed[p.id] = 0;
+        pushBonus[p.id] = 0;
+    }
+
+    const halfHistory = history
+        .filter(h => h.holeNumber !== holeNumber && (isFront9 ? h.holeNumber <= 9 : h.holeNumber >= 10))
+        .sort((a, b) => a.holeNumber - b.holeNumber);
+
+    for (const hole of halfHistory) {
+        for (const id of [...hole.teamA_Ids, ...hole.teamB_Ids]) {
+            pushUsed[id] = (pushUsed[id] ?? 0) + (hole.scores[id]?.pushCount ?? 0);
+        }
+
+        if (settings.birdyPushRecovery) {
+            for (const id of [...hole.teamA_Ids, ...hole.teamB_Ids]) {
+                if (id === BOGEY_KUN_ID) continue;
+                const score = hole.scores[id];
+                if (score?.isBirdie || score?.isEagle) {
+                    pushBonus[id] = (pushBonus[id] ?? 0) + 1;
+                }
+            }
+        }
+    }
+
+    return { pushUsed, pushBonus };
+}
+
 // ─── アクション型定義 ──────────────────────────────────────────────────
 interface GameActions {
     addPlayer: (name: string) => void;
@@ -435,12 +476,8 @@ export const useGameStore = create<GameStore>()(
             // ── プッシュ残り回数取得 ─────────────────────────────────
             getRemainingPushForPlayer: (id) => {
                 if (id === BOGEY_KUN_ID) return 0;
-                const { settings, pushUsed, pushBonus, pushUsedFront9, pushBonusFront9, currentHole } = get();
-                const isFront9 = currentHole <= 9;
-                // 前半ホール表示中かつホール9完了済み（front9スナップショットあり）の場合は前半データを使用
-                if (isFront9 && Object.keys(pushUsedFront9).length > 0) {
-                    return getRemainingPush(id, settings.maxPushCountPerHalf, pushUsedFront9, pushBonusFront9);
-                }
+                const { players, settings, currentHole, history } = get();
+                const { pushUsed, pushBonus } = buildPushStateForHoleHalf(players, history, settings, currentHole);
                 return getRemainingPush(id, settings.maxPushCountPerHalf, pushUsed, pushBonus);
             },
 
@@ -719,28 +756,24 @@ export const useGameStore = create<GameStore>()(
 
                 const sortedHistory = [...round.history].sort((a, b) => a.holeNumber - b.holeNumber);
                 const lastResult = sortedHistory[sortedHistory.length - 1];
-
-                // プッシュ状態を再構築（再開時は使用済み回数を履歴から再計算）
-                const initialPushUsed: Record<PlayerId, number> = {};
-                const initialPushBonus: Record<PlayerId, number> = {};
-                for (const p of round.players) {
-                    initialPushUsed[p.id] = 0;
-                    initialPushBonus[p.id] = 0;
-                }
+                const settings = {
+                    ...get().settings,
+                    matchName: round.name,
+                };
+                const rebuiltPushState = rebuildPushStateFromHistory(round.players, round.history, settings);
 
                 set({
-                    players: round.players,
+                    players: rebuiltPushState.players,
                     history: round.history,
                     currentHole: round.currentHole,
                     gameStatus: 'playing',
                     nextHoleMultiplier: lastResult?.nextHoleMultiplier ?? 1,
-                    settings: {
-                        ...get().settings,
-                        matchName: round.name,
-                    },
+                    settings,
                     playerRanking: [],
-                    pushUsed: initialPushUsed,
-                    pushBonus: initialPushBonus,
+                    pushUsed: rebuiltPushState.pushUsed,
+                    pushBonus: rebuiltPushState.pushBonus,
+                    pushUsedFront9: rebuiltPushState.pushUsedFront9,
+                    pushBonusFront9: rebuiltPushState.pushBonusFront9,
                 });
             },
         }),

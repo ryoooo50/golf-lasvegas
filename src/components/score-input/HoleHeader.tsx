@@ -18,11 +18,12 @@ interface HoleHeaderProps {
     onNextHole: () => void;
     onParPress: () => void;
     onHelpPress: () => void;
+    onHalfToggle: (half: 'front' | 'back') => void;
 }
 
 export const HoleHeader: React.FC<HoleHeaderProps> = ({
     currentHole, par, liveMultiplier, isFront9, canGoPrev, canGoNext, history,
-    onPrevHole, onNextHole, onParPress, onHelpPress,
+    onPrevHole, onNextHole, onParPress, onHelpPress, onHalfToggle,
 }) => {
     const { t } = useTranslation();
     const completedHoles = history.length;
@@ -30,8 +31,26 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
 
     return (
         <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-            {/* ヘルプボタン（右上） */}
-            <View style={styles.helpRow}>
+            {/* 前後半タブ + ヘルプボタン */}
+            <View style={styles.topRow}>
+                <View style={styles.halfToggle}>
+                    <TouchableOpacity
+                        onPress={() => onHalfToggle('front')}
+                        style={[styles.halfBtn, isFront9 && styles.halfBtnActive]}
+                    >
+                        <Text style={[styles.halfBtnText, isFront9 && styles.halfBtnTextActive]}>
+                            OUT 1-9
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => onHalfToggle('back')}
+                        style={[styles.halfBtn, !isFront9 && styles.halfBtnActive]}
+                    >
+                        <Text style={[styles.halfBtnText, !isFront9 && styles.halfBtnTextActive]}>
+                            IN 10-18
+                        </Text>
+                    </TouchableOpacity>
+                </View>
                 <TouchableOpacity onPress={onHelpPress} style={styles.toolBtn}>
                     <Text style={styles.toolBtnText}>?</Text>
                 </TouchableOpacity>
@@ -103,11 +122,37 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
 
 const styles = StyleSheet.create({
     safeArea: { backgroundColor: C.dark },
-    helpRow: {
+    topRow: {
         flexDirection: 'row',
-        justifyContent: 'flex-end',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         paddingHorizontal: 12,
         paddingTop: 4,
+        paddingBottom: 2,
+    },
+    halfToggle: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderRadius: 8,
+        padding: 2,
+        gap: 2,
+    },
+    halfBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
+    },
+    halfBtnActive: {
+        backgroundColor: 'rgba(255,255,255,0.18)',
+    },
+    halfBtnText: {
+        color: 'rgba(255,255,255,0.40)',
+        fontSize: 10,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+    },
+    halfBtnTextActive: {
+        color: '#ffffff',
     },
     toolBtn: { padding: 5 },
     toolBtnText: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },

@@ -68,6 +68,7 @@ export default {
             carryMult: "CARRY +{{n}}",
             resetHole: "Reset This Hole",
             holeTab: "Hole",
+            teamChange: "Change Team?",
         },
         setup: {
             playerCount: "Players",

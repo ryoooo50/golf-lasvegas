@@ -48,6 +48,7 @@ export const ScoreInputScreen = () => {
     const [editRate, setEditRate] = useState(settings.rate.toString());
     const [editPushLimit, setEditPushLimit] = useState(settings.maxPushCountPerHalf.toString());
     const [activeTab, setActiveTab] = useState<BottomTab>('hole');
+    const [pendingTeamChange, setPendingTeamChange] = useState<{ id: PlayerId; newTeam: 'A' | 'B' } | null>(null);
 
     useEffect(() => {
         bgScrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -149,9 +150,10 @@ export const ScoreInputScreen = () => {
     };
 
     const cyclePush = (id: PlayerId) => {
-        const PUSH_MAX = 10;
         const current = pushCounts[id] || 0;
-        const next = current >= PUSH_MAX ? 0 : current + 1;
+        const available = getRemainingPushForPlayer(id);
+        if (available <= 0) return;
+        const next = current >= available ? 0 : current + 1;
         setPushCounts(prev => ({ ...prev, [id]: next }));
     };
 
@@ -169,7 +171,7 @@ export const ScoreInputScreen = () => {
         }
 
         const overPushPlayers = players
-            .filter(p => (scoreInputs[p.id]?.pushCount ?? 0) > getRemainingPushForPlayer(p.id) + (pushCounts[p.id] || 0))
+            .filter(p => (scoreInputs[p.id]?.pushCount ?? 0) > getRemainingPushForPlayer(p.id))
             .map(p => p.name);
         if (overPushPlayers.length > 0) {
             return t('common.pushOverLimitWarning', { names: overPushPlayers.join(', ') });
@@ -327,6 +329,15 @@ export const ScoreInputScreen = () => {
                 onNextHole={() => goToHole(currentHole + 1)}
                 onParPress={() => setIsParDialogVisible(true)}
                 onHelpPress={() => setIsHelpVisible(true)}
+                onHalfToggle={(half) => {
+                    if (half === 'front') {
+                        const lastFront = history.filter(h => h.holeNumber <= 9).sort((a, b) => b.holeNumber - a.holeNumber)[0];
+                        goToHole(lastFront ? Math.min(lastFront.holeNumber + 1, 9) : 1);
+                    } else {
+                        const lastBack = history.filter(h => h.holeNumber >= 10).sort((a, b) => b.holeNumber - a.holeNumber)[0];
+                        goToHole(lastBack ? Math.min(lastBack.holeNumber + 1, 18) : 10);
+                    }
+                }}
             />
 
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -356,7 +367,7 @@ export const ScoreInputScreen = () => {
                                     onScoreChange={handleScoreChange}
                                     onBirdieToggle={handleBirdieToggle}
                                     onPushCycle={cyclePush}
-                                    onTeamToggle={(id, val) => setTeamAssignments(prev => ({ ...prev, [id]: val }))}
+                                    onTeamToggle={(id, val) => setPendingTeamChange({ id, newTeam: val })}
                                     onNamePress={openNameEditor}
                                     onParRequired={() => setIsParDialogVisible(true)}
                                 />
@@ -383,7 +394,7 @@ export const ScoreInputScreen = () => {
                                     onScoreChange={handleScoreChange}
                                     onBirdieToggle={handleBirdieToggle}
                                     onPushCycle={cyclePush}
-                                    onTeamToggle={(id, val) => setTeamAssignments(prev => ({ ...prev, [id]: val }))}
+                                    onTeamToggle={(id, val) => setPendingTeamChange({ id, newTeam: val })}
                                     onNamePress={openNameEditor}
                                     onParRequired={() => setIsParDialogVisible(true)}
                                 />
@@ -540,6 +551,26 @@ export const ScoreInputScreen = () => {
                             updateSettings({ rate: parseInt(editRate, 10) || settings.rate, maxPushCountPerHalf: parseInt(editPushLimit, 10) || settings.maxPushCountPerHalf });
                             setIsSettingsVisible(false);
                         }}>{t('common.update')}</Button>
+                    </Dialog.Actions>
+                </Dialog>
+
+                <Dialog visible={pendingTeamChange !== null} onDismiss={() => setPendingTeamChange(null)}>
+                    <Dialog.Title>{t('common.teamChange')}</Dialog.Title>
+                    <Dialog.Content>
+                        <Text variant="bodyMedium">
+                            {pendingTeamChange
+                                ? `${players.find(p => p.id === pendingTeamChange.id)?.name ?? ''} → Team ${pendingTeamChange.newTeam}`
+                                : ''}
+                        </Text>
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setPendingTeamChange(null)}>{t('common.cancel')}</Button>
+                        <Button onPress={() => {
+                            if (pendingTeamChange) {
+                                setTeamAssignments(prev => ({ ...prev, [pendingTeamChange.id]: pendingTeamChange.newTeam }));
+                            }
+                            setPendingTeamChange(null);
+                        }}>{t('common.ok')}</Button>
                     </Dialog.Actions>
                 </Dialog>
             </Portal>

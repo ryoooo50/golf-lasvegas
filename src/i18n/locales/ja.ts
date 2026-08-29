@@ -68,6 +68,7 @@ export default {
             carryMult: "CO +{{n}}",
             resetHole: "このホールをリセット",
             holeTab: "ホール",
+            teamChange: "チームを変更しますか？",
         },
         setup: {
             playerCount: "プレイヤー数",

@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { Button, Dialog, Portal, Text } from 'react-native-paper';
+import { C } from '../../theme/colors';
 import { CalculationBreakdown, Player } from '../../types';
 
 interface ResultSummaryDialogProps {
@@ -42,8 +43,8 @@ export const ResultSummaryDialog: React.FC<ResultSummaryDialogProps> = ({
 
     return (
         <Portal>
-            <Dialog visible={visible} onDismiss={onDismiss}>
-                <Dialog.Title style={{ textAlign: 'center' }}>
+            <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
+                <Dialog.Title style={styles.dialogTitle}>
                     {isDraw ? t('common.draw') : t('common.holeResult')}
                 </Dialog.Title>
                 <Dialog.Content>
@@ -67,7 +68,7 @@ export const ResultSummaryDialog: React.FC<ResultSummaryDialogProps> = ({
                                 {multiplierExpression ? ` × ${multiplierExpression}` : ''}
                                 {` = ×${finalMultiplier}`}
                             </Text>
-                            <Text style={styles.points}>
+                            <Text style={[styles.points, { color: finalPoints > 0 ? C.greenDeep : finalPoints < 0 ? C.coralDeep : C.ink3 }]}>
                                 {finalPoints}pt × {rate} = {finalPoints * rate}
                             </Text>
                         </>
@@ -82,12 +83,14 @@ export const ResultSummaryDialog: React.FC<ResultSummaryDialogProps> = ({
 };
 
 const styles = StyleSheet.create({
+    dialog: { backgroundColor: C.surface },
+    dialogTitle: { textAlign: 'center', color: C.ink },
     teamRow: { marginBottom: 6 },
-    teamLabel: { fontSize: 12, color: '#666', fontWeight: 'bold' },
-    scoreText: { fontSize: 15, fontWeight: 'bold' },
-    divider: { height: 1, backgroundColor: '#eee', marginVertical: 12 },
-    drawText: { fontSize: 15, textAlign: 'center', color: '#F57F17', fontWeight: 'bold' },
-    formulaTitle: { fontSize: 12, color: '#888', marginBottom: 4 },
-    formula: { fontSize: 14, color: '#333', marginBottom: 4 },
-    points: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginTop: 8, color: '#1a1a1a' },
+    teamLabel: { fontSize: 12, color: C.ink3, fontWeight: 'bold' },
+    scoreText: { fontSize: 15, fontWeight: 'bold', color: C.ink },
+    divider: { height: 1, backgroundColor: C.line, marginVertical: 12 },
+    drawText: { fontSize: 15, textAlign: 'center', color: C.gold, fontWeight: 'bold' },
+    formulaTitle: { fontSize: 12, color: C.ink4, marginBottom: 4 },
+    formula: { fontSize: 14, color: C.ink2, marginBottom: 4 },
+    points: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginTop: 8 },
 });
