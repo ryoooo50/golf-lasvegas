@@ -1,4 +1,4 @@
-import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -6,11 +6,10 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, RadioButton, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlayerNamesForm } from '../components/shared/PlayerNamesForm';
+import { C } from '../theme/colors';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import { Player } from '../types';
-
-const BG_IMAGE = require('../../assets/images/icon.png');
 
 const DEFAULT_PLAYER_NAMES = ['Player 1', 'Player 2', 'Player 3', 'Player 4'];
 
@@ -97,16 +96,18 @@ export const StartScreen = () => {
 
     return (
         <View style={styles.container}>
-            <Image source={BG_IMAGE} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-            <View style={styles.overlay} />
-
             <SafeAreaView style={styles.safeArea}>
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
                 >
-                    <Text style={styles.title}>Las Vegas Golf</Text>
-                    <Text style={styles.subtitle}>Ultimate Golf Game Calculator</Text>
+                    <View style={styles.brandPill}>
+                        <View style={styles.brandIcon}>
+                            <Ionicons name="flag" size={12} color="#fff" />
+                        </View>
+                        <Text style={styles.brandText}>GOLF LAS VEGAS</Text>
+                    </View>
+                    <Text style={styles.title}>試合をセットアップ</Text>
 
                     <View style={styles.card}>
                         {/* Match Name */}
@@ -262,7 +263,6 @@ export const StartScreen = () => {
                             style={styles.startButton}
                             contentStyle={styles.startContent}
                             labelStyle={styles.startLabel}
-                            buttonColor="#4CAF50"
                             accessibilityLabel={t('common.startGame')}
                         >
                             {t('common.startGame')}
@@ -271,7 +271,7 @@ export const StartScreen = () => {
 
                     {/* History */}
                     <Button
-                        mode="contained-tonal"
+                        mode="outlined"
                         icon="history"
                         style={styles.historyButton}
                         onPress={() => router.push('/history')}
@@ -282,7 +282,7 @@ export const StartScreen = () => {
                         <Button
                             mode="text"
                             icon="logout"
-                            textColor="#ddd"
+                            textColor={C.ink3}
                             onPress={() => signOut()}
                         >
                             {t('auth.logoutButton')}
@@ -297,27 +297,39 @@ export const StartScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
-    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+    container: { flex: 1, backgroundColor: C.bg },
     safeArea: { flex: 1 },
-    scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 32 },
-    title: { fontSize: 44, fontWeight: '900', color: '#fff', textAlign: 'center', letterSpacing: 2, marginBottom: 6, textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 10 },
-    subtitle: { fontSize: 16, color: '#ddd', marginBottom: 24, fontWeight: '300', textAlign: 'center' },
-    card: { backgroundColor: 'rgba(255,255,255,0.09)', borderRadius: 16, padding: 20, gap: 4 },
-    input: { marginBottom: 8 },
-    fieldLabel: { color: '#ccc', fontSize: 13, marginTop: 8, marginBottom: 2 },
+    scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 40, paddingBottom: 32 },
+    brandPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: 8,
+        backgroundColor: C.surface,
+        borderWidth: 1,
+        borderColor: C.line,
+        paddingVertical: 5,
+        paddingLeft: 6,
+        paddingRight: 12,
+        borderRadius: 999,
+        marginBottom: 16,
+    },
+    brandIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: C.greenPrimary, alignItems: 'center', justifyContent: 'center' },
+    brandText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, color: C.greenDeep },
+    title: { fontSize: 24, fontWeight: '800', color: C.ink, marginBottom: 20 },
+    card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: 20, padding: 20, gap: 4 },
+    input: { marginBottom: 8, backgroundColor: C.surface },
+    fieldLabel: { color: C.ink3, fontSize: 13, fontWeight: '600', marginTop: 10, marginBottom: 4 },
     row: { flexDirection: 'row', alignItems: 'center' },
     radioRow: { flexDirection: 'row' },
     radioItem: { flex: 1 },
-    radioLabel: { color: '#eee' },
-    stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginVertical: 8 },
+    radioLabel: { color: C.ink2 },
+    stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginVertical: 6 },
     stepperBtn: { minWidth: 48 },
-    stepperValue: { color: '#fff', fontSize: 22, fontWeight: 'bold', width: 32, textAlign: 'center' },
-    toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 8 },
-    toggleLabel: { color: '#eee', fontSize: 14, flex: 1 },
-    startButton: { marginTop: 20, borderRadius: 30 },
+    stepperValue: { color: C.ink, fontSize: 20, fontWeight: 'bold', width: 32, textAlign: 'center' },
+    startButton: { marginTop: 20, borderRadius: 16 },
     startContent: { height: 56 },
-    startLabel: { fontSize: 20, fontWeight: 'bold', letterSpacing: 1 },
-    historyButton: { marginTop: 16, borderRadius: 12 },
-    footer: { color: '#666', textAlign: 'center', marginBottom: 20, fontSize: 12 },
+    startLabel: { fontSize: 17, fontWeight: 'bold', letterSpacing: 0.5 },
+    historyButton: { marginTop: 16, borderRadius: 14 },
+    footer: { color: C.ink4, textAlign: 'center', marginBottom: 20, fontSize: 12 },
 });

@@ -1,11 +1,20 @@
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { C } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 
 type AuthMode = 'login' | 'signup';
+
+const FEATURE_PILLS: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+    { icon: 'trending-up-outline', label: 'バーディーFLIP' },
+    { icon: 'swap-horizontal-outline', label: 'PUSH倍率' },
+    { icon: 'time-outline', label: 'CARRY OVER' },
+];
 
 export const AuthScreen = () => {
     const { t } = useTranslation();
@@ -23,10 +32,6 @@ export const AuthScreen = () => {
         }
     };
 
-    const handleGuest = () => {
-        playAsGuest();
-    };
-
     const toggleMode = () => {
         setMode((prev) => (prev === 'login' ? 'signup' : 'login'));
     };
@@ -34,27 +39,48 @@ export const AuthScreen = () => {
     if (isLoading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#4CAF50" />
+                <ActivityIndicator size="large" color={C.greenPrimary} />
             </View>
         );
     }
 
     return (
         <View style={styles.container}>
+            <LinearGradient
+                colors={[C.greenTint, C.bg, C.bg]}
+                style={StyleSheet.absoluteFillObject}
+            />
             <SafeAreaView style={styles.safeArea}>
-                <View style={styles.inner}>
-                    {/* ロゴ・タイトル */}
-                    <Text style={styles.title}>Las Vegas Golf</Text>
-                    <Text style={styles.subtitle}>Ultimate Golf Game Calculator</Text>
+                <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                    <View style={styles.brandPill}>
+                        <View style={styles.brandIcon}>
+                            <Ionicons name="flag" size={12} color="#fff" />
+                        </View>
+                        <Text style={styles.brandText}>GOLF LAS VEGAS</Text>
+                    </View>
 
-                    {/* タブ切り替え */}
+                    <Text style={styles.hero}>
+                        ラスベガスの{'\n'}
+                        <Text style={styles.heroAccent}>計算ミス、</Text>ゼロへ。
+                    </Text>
+                    <Text style={styles.heroSub}>
+                        バーディーフリップ、プッシュ倍率、キャリーオーバー。{'\n'}複雑な計算は全部おまかせ。
+                    </Text>
+
+                    <View style={styles.pillRow}>
+                        {FEATURE_PILLS.map((f) => (
+                            <View key={f.label} style={styles.featurePill}>
+                                <Ionicons name={f.icon} size={13} color={C.greenPrimary} />
+                                <Text style={styles.featurePillText}>{f.label}</Text>
+                            </View>
+                        ))}
+                    </View>
+
                     <View style={styles.tabRow}>
                         <Button
                             mode={mode === 'login' ? 'contained' : 'outlined'}
                             onPress={() => setMode('login')}
                             style={styles.tabButton}
-                            buttonColor={mode === 'login' ? '#4CAF50' : undefined}
-                            textColor={mode === 'login' ? '#fff' : '#aaa'}
                             compact
                         >
                             {t('auth.loginTitle')}
@@ -63,15 +89,12 @@ export const AuthScreen = () => {
                             mode={mode === 'signup' ? 'contained' : 'outlined'}
                             onPress={() => setMode('signup')}
                             style={styles.tabButton}
-                            buttonColor={mode === 'signup' ? '#4CAF50' : undefined}
-                            textColor={mode === 'signup' ? '#fff' : '#aaa'}
                             compact
                         >
                             {t('auth.signupTitle')}
                         </Button>
                     </View>
 
-                    {/* フォーム */}
                     <View style={styles.card}>
                         <TextInput
                             label={t('auth.email')}
@@ -81,9 +104,6 @@ export const AuthScreen = () => {
                             keyboardType="email-address"
                             mode="outlined"
                             style={styles.input}
-                            textColor="#fff"
-                            outlineColor="#555"
-                            activeOutlineColor="#4CAF50"
                         />
                         <TextInput
                             label={t('auth.password')}
@@ -92,9 +112,6 @@ export const AuthScreen = () => {
                             secureTextEntry
                             mode="outlined"
                             style={styles.input}
-                            textColor="#fff"
-                            outlineColor="#555"
-                            activeOutlineColor="#4CAF50"
                         />
 
                         {error !== null && (
@@ -107,143 +124,69 @@ export const AuthScreen = () => {
                             style={styles.submitButton}
                             contentStyle={styles.submitContent}
                             labelStyle={styles.submitLabel}
-                            buttonColor="#4CAF50"
                             disabled={isLoading}
                         >
                             {mode === 'login' ? t('auth.loginButton') : t('auth.signupButton')}
                         </Button>
 
-                        <Button
-                            mode="text"
-                            onPress={toggleMode}
-                            style={styles.toggleButton}
-                            textColor="#aaa"
-                            compact
-                        >
+                        <Button mode="text" onPress={toggleMode} style={styles.toggleButton} compact>
                             {mode === 'login' ? t('auth.noAccount') : t('auth.alreadyAccount')}
                         </Button>
                     </View>
 
-                    {/* ゲストとして開始 */}
-                    <View style={styles.dividerRow}>
-                        <View style={styles.divider} />
-                        <Text style={styles.dividerText}>OR</Text>
-                        <View style={styles.divider} />
-                    </View>
-
                     <Button
-                        mode="outlined"
-                        onPress={handleGuest}
+                        mode="text"
+                        onPress={() => playAsGuest()}
                         style={styles.guestButton}
-                        contentStyle={styles.guestContent}
-                        textColor="#ccc"
-                        icon="account-outline"
+                        textColor={C.ink3}
                     >
-                        {t('auth.guestButton')}
+                        {t('auth.guestButton')} →
                     </Button>
-                </View>
+                </ScrollView>
             </SafeAreaView>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#000',
-    },
-    loadingContainer: {
-        flex: 1,
-        backgroundColor: '#000',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    safeArea: {
-        flex: 1,
-    },
-    inner: {
-        flex: 1,
-        paddingHorizontal: 24,
-        paddingVertical: 32,
-        justifyContent: 'center',
-    },
-    title: {
-        fontSize: 40,
-        fontWeight: '900',
-        color: '#fff',
-        textAlign: 'center',
-        letterSpacing: 2,
-        marginBottom: 6,
-        textShadowColor: 'rgba(0,0,0,0.7)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 10,
-    },
-    subtitle: {
-        fontSize: 14,
-        color: '#aaa',
-        marginBottom: 32,
-        fontWeight: '300',
-        textAlign: 'center',
-    },
-    tabRow: {
+    container: { flex: 1, backgroundColor: C.bg },
+    loadingContainer: { flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
+    safeArea: { flex: 1 },
+    scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 48, paddingBottom: 32, justifyContent: 'center' },
+    brandPill: {
         flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
         gap: 8,
-        marginBottom: 16,
+        backgroundColor: 'rgba(255,255,255,0.7)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.9)',
+        paddingVertical: 5,
+        paddingLeft: 6,
+        paddingRight: 12,
+        borderRadius: 999,
+        marginBottom: 24,
     },
-    tabButton: {
-        flex: 1,
-        borderRadius: 8,
+    brandIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: C.greenPrimary, alignItems: 'center', justifyContent: 'center' },
+    brandText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, color: C.greenDeep },
+    hero: { fontSize: 30, fontWeight: '800', color: C.ink, lineHeight: 38 },
+    heroAccent: { color: C.greenPrimary },
+    heroSub: { fontSize: 13, color: C.ink3, fontWeight: '500', marginTop: 10, lineHeight: 20 },
+    pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 16, marginBottom: 28 },
+    featurePill: {
+        flexDirection: 'row', alignItems: 'center', gap: 5,
+        backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+        borderRadius: 999, paddingHorizontal: 11, paddingVertical: 6,
     },
-    card: {
-        backgroundColor: 'rgba(255,255,255,0.07)',
-        borderRadius: 16,
-        padding: 20,
-        gap: 4,
-    },
-    input: {
-        marginBottom: 12,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-    },
-    errorText: {
-        color: '#f44336',
-        fontSize: 13,
-        marginBottom: 8,
-        textAlign: 'center',
-    },
-    submitButton: {
-        marginTop: 8,
-        borderRadius: 30,
-    },
-    submitContent: {
-        height: 50,
-    },
-    submitLabel: {
-        fontSize: 17,
-        fontWeight: 'bold',
-    },
-    toggleButton: {
-        marginTop: 4,
-    },
-    dividerRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 20,
-        gap: 12,
-    },
-    divider: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#333',
-    },
-    dividerText: {
-        color: '#555',
-        fontSize: 12,
-    },
-    guestButton: {
-        borderColor: '#444',
-        borderRadius: 30,
-    },
-    guestContent: {
-        height: 50,
-    },
+    featurePillText: { fontSize: 11, fontWeight: '600', color: C.ink2 },
+    tabRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+    tabButton: { flex: 1, borderRadius: 10 },
+    card: { backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.line, padding: 20, gap: 4 },
+    input: { marginBottom: 12, backgroundColor: C.surface },
+    errorText: { color: C.coralPrimary, fontSize: 13, marginBottom: 8, textAlign: 'center' },
+    submitButton: { marginTop: 8, borderRadius: 30 },
+    submitContent: { height: 50 },
+    submitLabel: { fontSize: 16, fontWeight: 'bold' },
+    toggleButton: { marginTop: 4 },
+    guestButton: { marginTop: 16, alignSelf: 'center' },
 });

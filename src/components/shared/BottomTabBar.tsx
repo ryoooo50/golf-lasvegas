@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -12,11 +14,11 @@ interface BottomTabBarProps {
     onChange: (tab: BottomTab) => void;
 }
 
-const TABS: { key: BottomTab; icon: string; labelKey: string }[] = [
-    { key: 'hole', icon: '⛳', labelKey: 'common.holeTab' },
-    { key: 'scorecard', icon: '📋', labelKey: 'common.scorecard' },
-    { key: 'history', icon: '📜', labelKey: 'common.viewHistory' },
-    { key: 'settings', icon: '⚙', labelKey: 'common.settings' },
+const TABS: { key: BottomTab; icon: keyof typeof Ionicons.glyphMap; labelKey: string }[] = [
+    { key: 'hole', icon: 'flag', labelKey: 'common.holeTab' },
+    { key: 'scorecard', icon: 'grid-outline', labelKey: 'common.scorecard' },
+    { key: 'history', icon: 'time-outline', labelKey: 'common.viewHistory' },
+    { key: 'settings', icon: 'settings-outline', labelKey: 'common.settings' },
 ];
 
 export function BottomTabBar({ activeTab, onChange }: BottomTabBarProps) {
@@ -24,54 +26,73 @@ export function BottomTabBar({ activeTab, onChange }: BottomTabBarProps) {
     const insets = useSafeAreaInsets();
 
     return (
-        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 6) }]}>
-            {TABS.map(tab => {
-                const isActive = tab.key === activeTab;
-                return (
-                    <TouchableOpacity
-                        key={tab.key}
-                        style={styles.tab}
-                        onPress={() => onChange(tab.key)}
-                        accessibilityRole="tab"
-                        accessibilityState={{ selected: isActive }}
-                    >
-                        <Text style={[styles.icon, isActive && styles.iconActive]}>{tab.icon}</Text>
-                        <Text style={[styles.label, isActive && styles.labelActive]}>
-                            {t(tab.labelKey)}
-                        </Text>
-                        {isActive && <View style={styles.activeIndicator} />}
-                    </TouchableOpacity>
-                );
-            })}
+        <View style={[styles.wrap, { bottom: Math.max(insets.bottom, 12) }]}>
+            <BlurView intensity={60} tint="light" style={styles.container}>
+                {TABS.map(tab => {
+                    const isActive = tab.key === activeTab;
+                    return (
+                        <TouchableOpacity
+                            key={tab.key}
+                            style={[styles.tab, isActive && styles.tabActive]}
+                            onPress={() => onChange(tab.key)}
+                            accessibilityRole="tab"
+                            accessibilityState={{ selected: isActive }}
+                        >
+                            <Ionicons
+                                name={tab.icon}
+                                size={18}
+                                color={isActive ? '#ffffff' : C.ink3}
+                            />
+                            <Text style={[styles.label, isActive && styles.labelActive]}>
+                                {t(tab.labelKey)}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </BlurView>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
+    wrap: {
+        position: 'absolute',
+        left: 12,
+        right: 12,
+    },
     container: {
         flexDirection: 'row',
-        backgroundColor: C.dark,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.10)',
-        paddingTop: 8,
+        height: 60,
+        borderRadius: 999,
+        padding: 5,
+        gap: 4,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: C.line,
+        backgroundColor: 'rgba(255,255,255,0.75)',
+        shadowColor: '#141e14',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 6,
     },
     tab: {
         flex: 1,
+        flexDirection: 'row',
         alignItems: 'center',
-        gap: 2,
-        paddingVertical: 2,
-        position: 'relative',
+        justifyContent: 'center',
+        gap: 5,
+        borderRadius: 999,
     },
-    icon: { fontSize: 18, opacity: 0.45 },
-    iconActive: { opacity: 1 },
-    label: { fontSize: 9, fontWeight: '600', color: 'rgba(255,255,255,0.40)', letterSpacing: 0.3 },
-    labelActive: { color: '#ffffff', fontWeight: '800' },
-    activeIndicator: {
-        position: 'absolute',
-        top: -8,
-        width: 28,
-        height: 2,
-        borderRadius: 1,
-        backgroundColor: C.greenPrimary,
+    tabActive: {
+        backgroundColor: C.ink,
+    },
+    label: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: C.ink3,
+    },
+    labelActive: {
+        color: '#ffffff',
     },
 });

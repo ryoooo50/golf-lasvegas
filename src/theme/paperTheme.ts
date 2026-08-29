@@ -1,0 +1,36 @@
+import { MD3LightTheme } from 'react-native-paper';
+import { C } from './colors';
+
+export const paperTheme = {
+    ...MD3LightTheme,
+    roundness: 14,
+    colors: {
+        ...MD3LightTheme.colors,
+        primary: C.greenPrimary,
+        onPrimary: '#ffffff',
+        primaryContainer: C.greenTint,
+        onPrimaryContainer: C.greenDeep,
+        secondary: C.sky,
+        onSecondary: '#ffffff',
+        secondaryContainer: C.skyTint,
+        onSecondaryContainer: '#2c4a5e',
+        tertiary: C.gold,
+        onTertiary: '#ffffff',
+        tertiaryContainer: C.goldTint,
+        error: C.coralPrimary,
+        onError: '#ffffff',
+        errorContainer: C.coralTint,
+        onErrorContainer: C.coralDeep,
+        background: C.bg,
+        onBackground: C.ink,
+        surface: C.surface,
+        onSurface: C.ink,
+        surfaceVariant: C.surface2,
+        onSurfaceVariant: C.ink3,
+        outline: C.line,
+        outlineVariant: C.line2,
+        inverseSurface: C.dark,
+        inverseOnSurface: '#ffffff',
+        inversePrimary: C.greenTint,
+    },
+};

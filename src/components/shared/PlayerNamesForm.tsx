@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { Text, TextInput } from 'react-native-paper';
+import { C } from '../../theme/colors';
 
 interface PlayerNamesFormProps {
     names: string[];
@@ -60,8 +61,9 @@ export const PlayerNamesForm: React.FC<PlayerNamesFormProps> = ({
 const styles = StyleSheet.create({
     container: { gap: 4 },
     sectionLabel: {
-        color: '#ccc',
+        color: C.ink3,
         fontSize: 13,
+        fontWeight: '600',
         marginBottom: 4,
         marginTop: 8,
     },
