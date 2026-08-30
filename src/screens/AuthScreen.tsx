@@ -59,10 +59,7 @@ export const AuthScreen = () => {
                         <Text style={styles.brandText}>GOLF LAS VEGAS</Text>
                     </View>
 
-                    <Text style={styles.hero}>
-                        ラスベガスの{'\n'}
-                        <Text style={styles.heroAccent}>計算ミス、</Text>ゼロへ。
-                    </Text>
+                    <Text style={styles.hero}>ラスベガス集計アプリ</Text>
                     <Text style={styles.heroSub}>
                         バーディーフリップ、プッシュ倍率、キャリーオーバー。{'\n'}複雑な計算は全部おまかせ。
                     </Text>
@@ -170,7 +167,6 @@ const styles = StyleSheet.create({
     brandIcon: { width: 22, height: 22, borderRadius: 11, backgroundColor: C.greenPrimary, alignItems: 'center', justifyContent: 'center' },
     brandText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, color: C.greenDeep },
     hero: { fontSize: 30, fontWeight: '800', color: C.ink, lineHeight: 38 },
-    heroAccent: { color: C.greenPrimary },
     heroSub: { fontSize: 13, color: C.ink3, fontWeight: '500', marginTop: 10, lineHeight: 20 },
     pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 16, marginBottom: 28 },
     featurePill: {
