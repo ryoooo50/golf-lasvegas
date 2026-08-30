@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Dialog, Portal, Text, TextInput } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HoleHeader } from '../components/score-input/HoleHeader';
 import { LivePreviewPanel } from '../components/score-input/LivePreviewPanel';
 import { ParSelectDialog } from '../components/score-input/ParSelectDialog';
@@ -18,8 +17,6 @@ import { calculateLivePreview } from '../utils/golfLogic';
 
 export const ScoreInputScreen = () => {
     const router = useRouter();
-    const insets = useSafeAreaInsets();
-    const tabBarClearance = 60 + Math.max(insets.bottom, 12) + 8;
     const {
         players, currentHole, nextHoleMultiplier, completeHole, settings,
         getRecommendedPairs, getPlayerTotalScore, updatePlayerName,
@@ -391,7 +388,7 @@ export const ScoreInputScreen = () => {
                         />
                     </ScrollView>
 
-                    <View style={[styles.bottomContainer, { paddingBottom: tabBarClearance }]}>
+                    <View style={styles.bottomContainer}>
                         {isEditingExisting && (
                             <TouchableOpacity onPress={handleResetHole} style={styles.resetBtn}>
                                 <Text style={styles.resetBtnText}>{t('common.resetHole')}</Text>
@@ -491,8 +488,8 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: C.bg,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
         overflow: 'hidden',
     },
     scrollContent: { paddingBottom: 110 },
@@ -525,7 +522,7 @@ const styles = StyleSheet.create({
     },
     resetBtn: {
         height: 38,
-        borderRadius: 10,
+        borderRadius: 6,
         borderWidth: 1,
         borderColor: C.coralPrimary,
         alignItems: 'center',
@@ -535,7 +532,7 @@ const styles = StyleSheet.create({
     saveBtn: {
         flex: 1,
         height: 50,
-        borderRadius: 12,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: C.line,
         alignItems: 'center',
@@ -546,7 +543,7 @@ const styles = StyleSheet.create({
     nextBtn: {
         flex: 2,
         height: 50,
-        borderRadius: 12,
+        borderRadius: 8,
         backgroundColor: C.greenPrimary,
         alignItems: 'center',
         justifyContent: 'center',

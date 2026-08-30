@@ -113,6 +113,6 @@ const styles = StyleSheet.create({
     stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
     stepperBtn: { minWidth: 48 },
     stepperValue: { fontSize: 20, fontWeight: '700', width: 32, textAlign: 'center', color: C.ink },
-    saveBtn: { marginTop: 12, borderRadius: 14 },
-    secondaryBtn: { marginTop: 10, borderRadius: 14 },
+    saveBtn: { marginTop: 12, borderRadius: 8 },
+    secondaryBtn: { marginTop: 10, borderRadius: 6 },
 });

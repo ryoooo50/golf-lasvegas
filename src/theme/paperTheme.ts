@@ -3,7 +3,7 @@ import { C } from './colors';
 
 export const paperTheme = {
     ...MD3LightTheme,
-    roundness: 14,
+    roundness: 6,
     colors: {
         ...MD3LightTheme.colors,
         primary: C.greenPrimary,

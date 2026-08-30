@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     legendText: { fontSize: 11, color: C.ink3, fontWeight: '600' },
     legendPush: { fontSize: 11, color: C.sky, fontWeight: '700' },
     sectionTitle: { fontSize: 12, fontWeight: '700', color: C.ink3, letterSpacing: 1, paddingHorizontal: 16, marginBottom: 8, marginTop: 4 },
-    pointsTable: { marginHorizontal: 16, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.line, overflow: 'hidden' },
+    pointsTable: { marginHorizontal: 16, backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.line, overflow: 'hidden' },
     pointsHeaderRow: { flexDirection: 'row', backgroundColor: C.surface2, paddingVertical: 8 },
     pointsHeaderText: { fontSize: 10, fontWeight: '700', color: C.ink3, textAlign: 'center' },
     pointsRow: { flexDirection: 'row', paddingVertical: 8, borderTopWidth: 1, borderTopColor: C.line2 },

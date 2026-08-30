@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -26,73 +25,63 @@ export function BottomTabBar({ activeTab, onChange }: BottomTabBarProps) {
     const insets = useSafeAreaInsets();
 
     return (
-        <View style={[styles.wrap, { bottom: Math.max(insets.bottom, 12) }]}>
-            <BlurView intensity={60} tint="light" style={styles.container}>
-                {TABS.map(tab => {
-                    const isActive = tab.key === activeTab;
-                    return (
-                        <TouchableOpacity
-                            key={tab.key}
-                            style={[styles.tab, isActive && styles.tabActive]}
-                            onPress={() => onChange(tab.key)}
-                            accessibilityRole="tab"
-                            accessibilityState={{ selected: isActive }}
-                        >
-                            <Ionicons
-                                name={tab.icon}
-                                size={18}
-                                color={isActive ? '#ffffff' : C.ink3}
-                            />
-                            <Text style={[styles.label, isActive && styles.labelActive]}>
-                                {t(tab.labelKey)}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </BlurView>
+        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            {TABS.map(tab => {
+                const isActive = tab.key === activeTab;
+                return (
+                    <TouchableOpacity
+                        key={tab.key}
+                        style={styles.tab}
+                        onPress={() => onChange(tab.key)}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: isActive }}
+                    >
+                        <View style={[styles.indicator, isActive && styles.indicatorActive]} />
+                        <Ionicons
+                            name={tab.icon}
+                            size={18}
+                            color={isActive ? C.greenPrimary : 'rgba(255,255,255,0.45)'}
+                        />
+                        <Text style={[styles.label, isActive && styles.labelActive]}>
+                            {t(tab.labelKey)}
+                        </Text>
+                    </TouchableOpacity>
+                );
+            })}
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    wrap: {
-        position: 'absolute',
-        left: 12,
-        right: 12,
-    },
     container: {
         flexDirection: 'row',
-        height: 60,
-        borderRadius: 999,
-        padding: 5,
-        gap: 4,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: C.line,
-        backgroundColor: 'rgba(255,255,255,0.75)',
-        shadowColor: '#141e14',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 6,
+        backgroundColor: C.dark,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.08)',
+        paddingTop: 6,
     },
     tab: {
         flex: 1,
-        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 5,
-        borderRadius: 999,
+        gap: 3,
+        paddingVertical: 4,
     },
-    tabActive: {
-        backgroundColor: C.ink,
+    indicator: {
+        width: 16,
+        height: 2,
+        backgroundColor: 'transparent',
+        marginBottom: 2,
+    },
+    indicatorActive: {
+        backgroundColor: C.greenPrimary,
     },
     label: {
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: '700',
-        color: C.ink3,
+        color: 'rgba(255,255,255,0.45)',
     },
     labelActive: {
-        color: '#ffffff',
+        color: C.greenPrimary,
     },
 });

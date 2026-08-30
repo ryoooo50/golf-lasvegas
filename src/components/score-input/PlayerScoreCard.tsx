@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     card: {
         flex: 1,
         backgroundColor: C.surface,
-        borderRadius: 16,
+        borderRadius: 10,
         borderWidth: 1.5,
         padding: 10,
         gap: 8,
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: C.bg,
-        borderRadius: 12,
+        borderRadius: 8,
         overflow: 'hidden',
     },
     stepBtn: {
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     diffLabel: { fontSize: 10, fontWeight: '700', marginTop: 0 },
 
     pushPill: {
-        borderRadius: 99,
+        borderRadius: 6,
         paddingVertical: 5,
         paddingHorizontal: 8,
         alignItems: 'center',
