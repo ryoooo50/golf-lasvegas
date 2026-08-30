@@ -80,16 +80,6 @@ function computeFinalMultiplier(pushMult: number, coMult: number, eagleMult: num
     return Math.max(1, pushMult + coMult + eagleMult);
 }
 
-/**
- * 次ホールのCOLevel計算
- * - 引き分け: COLevel + 1
- * - 勝敗確定: 0 にリセット
- */
-function computeNextCarryOverLevel(isDraw: boolean, currentLevel: number): number {
-    if (!isDraw) return 0;
-    return currentLevel + 1;
-}
-
 export function calculateHoleResult(params: CalculateHoleResultParams): HoleResult {
     const { holeNumber, par, scores, teamA_Ids, teamB_Ids, currentCarryOverLevel } = params;
 

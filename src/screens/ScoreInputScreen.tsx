@@ -89,6 +89,10 @@ export const ScoreInputScreen = () => {
                 setPushCounts({});
             }
         }
+        // players/getRemainingPushForPlayer は意図的に依存配列から除外している。
+        // players は名前編集などでも参照が変わるため、含めるとホール入力中に
+        // プレイヤー名を変更しただけでスコア入力がリセットされてしまう。
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentHole, history, getRecommendedPairs]);
 
     useEffect(() => {
