@@ -33,6 +33,15 @@ You can start developing by editing the files inside the **app** directory. This
 
 必要な環境変数は `.env.example` を参照。
 
+### 権限（管理者 / ユーザー）
+
+- Better Auth の admin プラグインで `user.role` を `admin` / `user` に分けている。新規登録は `user`。
+- 環境変数 `ADMIN_EMAILS`（カンマ区切り）に載っているメールは、登録時・ログイン時に `admin` になる。
+- 管理者は開始画面の「ユーザー管理」から、ユーザー一覧・利用停止・削除・パスワード再設定・権限変更ができる（なりすましは不可）。
+- 権限の判定はサーバー側（`server/auth.ts`）で行う。アプリ側の `isAdmin` は画面の出し分けにだけ使う。
+- `ADMIN_EMAILS` は昇格のみ（外しても降格しない）。メール確認をしていないので、登録済みアカウントのメールだけを載せる。
+- 本番に出すときは **先に `npm run db:migrate` で Neon に列を追加してからデプロイ** する（逆順だとログインが失敗する）。
+
 ```bash
 # API の結合テスト（ローカルの Postgres に対して実行）
 docker run -d --name golf-lv-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=golf -p 54329:5432 postgres:17-alpine

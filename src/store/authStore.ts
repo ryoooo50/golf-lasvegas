@@ -7,6 +7,7 @@ import { toAuthErrorKey } from '../utils/authErrorMessage';
 export interface AuthUser {
   id: string;
   email: string;
+  isAdmin: boolean;
 }
 
 interface AuthState {
@@ -28,8 +29,9 @@ function getErrorMessage(error: unknown): string {
   return i18n.t(key, { detail });
 }
 
-function toAuthUser(user: { id: string; email: string } | null | undefined): AuthUser | null {
-  return user ? { id: user.id, email: user.email } : null;
+// 管理者かどうかは画面の出し分けにだけ使う。実際の権限チェックはサーバー側で行う
+function toAuthUser(user: { id: string; email: string; role?: string | null } | null | undefined): AuthUser | null {
+  return user ? { id: user.id, email: user.email, isAdmin: user.role === 'admin' } : null;
 }
 
 // オフライン起動でもログイン状態を保つため、最後に確認できたユーザーを端末に残す
@@ -49,7 +51,11 @@ async function readCachedUser(): Promise<AuthUser | null> {
     const raw = await AsyncStorage.getItem(CACHED_USER_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : null;
     if (parsed && typeof parsed === 'object' && typeof (parsed as AuthUser).id === 'string') {
-      return { id: (parsed as AuthUser).id, email: String((parsed as AuthUser).email ?? '') };
+      return {
+        id: (parsed as AuthUser).id,
+        email: String((parsed as AuthUser).email ?? ''),
+        isAdmin: (parsed as AuthUser).isAdmin === true,
+      };
     }
   } catch {
     // 壊れたキャッシュは無視する

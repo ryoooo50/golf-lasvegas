@@ -4,8 +4,9 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import i18n from '../i18n/i18n';
 import * as cloudSave from '../services/cloudSave';
 import { useAuthStore } from './authStore';
-import { GameState, HoleDraft, HoleResult, PendingCloudSave, Player, PlayerId, PlayerProfile, RoundResult, RoundStatus, SaveRoundResult, ScoreInput } from '../types';
+import { GameState, HoleDraft, HoleResult, PendingCloudSave, Player, PlayerHandicap, PlayerId, PlayerProfile, RoundResult, RoundStatus, SaveRoundResult, ScoreInput } from '../types';
 import { calculateHoleResult } from '../utils/golfLogic';
+import { hasHandicap } from '../utils/handicap';
 import { computeRankingForHole } from '../utils/teamRanking';
 import { BOGEY_KUN_ID, applySoloPlayerPointMultiplier, computeTeamPairs, findSoloPlayer } from '../utils/threePlayerMode';
 
@@ -73,6 +74,14 @@ function buildRoundSaveData(
         played_at: settings.playedAt,
         memo: settings.memo,
     };
+}
+
+/** 履歴の最新ホールからプレイヤーのハンデを復元する（クラウドにはハンデ列が無いため） */
+function latestHandicapFromHistory(playerId: PlayerId, history: HoleResult[]): PlayerHandicap | undefined {
+    const latest = [...history]
+        .sort((a, b) => b.holeNumber - a.holeNumber)
+        .find(hole => hole.scores[playerId] !== undefined);
+    return latest?.scores[playerId]?.handicap;
 }
 
 function updatePlayerProfiles(profiles: PlayerProfile[], names: string[], ownerId: string): PlayerProfile[] {
@@ -266,6 +275,8 @@ interface GameActions {
 
     resetGame: () => void;
     updatePlayerName: (id: PlayerId, name: string) => void;
+    /** ハンデを設定する。undefined でハンデなし */
+    setPlayerHandicap: (id: PlayerId, handicap: PlayerHandicap | undefined) => void;
 
     /**
      * 推奨チームペアを返す。
@@ -496,6 +507,14 @@ export const useGameStore = create<GameStore>()(
             updatePlayerName: (id, name) =>
                 set((state) => ({
                     players: state.players.map((p) => (p.id === id ? { ...p, name } : p)),
+                })),
+
+            setPlayerHandicap: (id, handicap) =>
+                set((state) => ({
+                    players: state.players.map((p) => {
+                        if (p.id !== id) return p;
+                        return { ...p, handicap: hasHandicap(handicap) ? handicap : undefined };
+                    }),
                 })),
 
             // ── 推奨チームペア取得 ────────────────────────────────────
@@ -876,12 +895,16 @@ export const useGameStore = create<GameStore>()(
                         cloudId: r.id,
                         date: r.created_at,
                         name: r.match_name,
-                        players: Object.entries(r.player_names).map(([id, name]) => ({
-                            id,
-                            name,
-                            type: id === BOGEY_KUN_ID ? 'bogey_kun' as const : 'real' as const,
-                            pushUsageCount: { front9: 0, back9: 0 },
-                        })),
+                        players: Object.entries(r.player_names).map(([id, name]) => {
+                            const handicap = latestHandicapFromHistory(id, (r.holes as HoleResult[]) ?? []);
+                            return {
+                                id,
+                                name,
+                                type: id === BOGEY_KUN_ID ? 'bogey_kun' as const : 'real' as const,
+                                pushUsageCount: { front9: 0, back9: 0 },
+                                ...(handicap ? { handicap } : {}),
+                            };
+                        }),
                         history: (r.holes as HoleResult[]) ?? [],
                         finalScores: r.total_points,
                         gameStatus: r.status ?? 'completed',

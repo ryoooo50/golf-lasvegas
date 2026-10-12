@@ -22,6 +22,7 @@ const CODE_TO_KEY: Record<string, string> = {
     EMAIL_NOT_VERIFIED: 'auth.errorEmailNotConfirmed',
     PASSWORD_TOO_SHORT: 'auth.errorWeakPassword',
     INVALID_EMAIL: 'auth.errorInvalidEmail',
+    BANNED_USER: 'auth.errorBanned',
 };
 
 interface ErrorLike {

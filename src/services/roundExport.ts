@@ -3,6 +3,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import { RoundResult } from '../types';
+import { grossScoreOf } from '../utils/handicap';
 import { calculateMinimumSettlement } from '../utils/settlement';
 
 function safeFilename(value: string): string {
@@ -42,7 +43,7 @@ export function buildRoundCsv(round: RoundResult): string {
             rows.push([
                 String(hole.holeNumber),
                 String(hole.par),
-                ...realPlayers.map(player => String(hole.scores[player.id]?.score ?? '')),
+                ...realPlayers.map(player => String(grossScoreOf(hole.scores[player.id]) ?? '')),
                 ...realPlayers.map(player => String(hole.pointsResult[player.id] ?? 0)),
             ]);
         });
@@ -68,7 +69,7 @@ export function buildRoundHtml(round: RoundResult): string {
     const transfers = calculateMinimumSettlement(round.players, round.finalScores, round.settings.rate);
     const scoreRows = [...round.history]
         .sort((a, b) => a.holeNumber - b.holeNumber)
-        .map(hole => `<tr><td>${hole.holeNumber}</td><td>${hole.par}</td>${realPlayers.map(player => `<td>${hole.scores[player.id]?.score ?? '-'}</td>`).join('')}</tr>`)
+        .map(hole => `<tr><td>${hole.holeNumber}</td><td>${hole.par}</td>${realPlayers.map(player => `<td>${grossScoreOf(hole.scores[player.id]) ?? '-'}</td>`).join('')}</tr>`)
         .join('');
     const finalRows = realPlayers.map(player => {
         const points = round.finalScores[player.id] ?? 0;

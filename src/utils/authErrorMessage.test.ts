@@ -38,4 +38,8 @@ describe('toAuthErrorKey', () => {
         expect(toAuthErrorKey({ status: 418, statusText: "I'm a teapot", message: 'odd' })).toEqual({ key: 'auth.errorUnknown', detail: 'odd' });
         expect(toAuthErrorKey('weird')).toEqual({ key: 'auth.errorUnknown', detail: 'weird' });
     });
+
+    test('maps a banned user to the banned message', () => {
+        expect(toAuthErrorKey({ code: 'BANNED_USER', status: 403, message: 'You have been banned' })).toEqual({ key: 'auth.errorBanned' });
+    });
 });

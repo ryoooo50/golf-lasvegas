@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Player, PlayerId } from '../../types';
 import { C } from '../../theme/colors';
+import { applyHandicap, formatHandicap, hasHandicap } from '../../utils/handicap';
 
 interface PlayerScoreCardProps {
     player: Player;
@@ -26,7 +27,7 @@ export function PlayerScoreCard({
     totalScore, remainingPush, onScoreChange, onBirdieToggle, onPushCycle,
     onTeamToggle, onNamePress, onParRequired,
 }: PlayerScoreCardProps) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const isTeamA = team === 'A';
     const teamColor = isTeamA ? C.greenPrimary : C.coralPrimary;
     const teamDeep = isTeamA ? C.greenDeep : C.coralDeep;
@@ -35,24 +36,27 @@ export function PlayerScoreCard({
     const isOverLimit = pushCount > available;
     const canPush = true; // 上限超過も許可（フィールドでの追加対応）
 
-    const isAutoEagle = par !== null && score !== undefined && score > 0 && score <= par - 2;
-    const isAutoBirdie = par !== null && score !== undefined && score > 0 && score === par - 1;
+    const handicap = player.type === 'bogey_kun' ? undefined : player.handicap;
+    const netScore = par !== null && score !== undefined && score > 0 ? applyHandicap(score, par, handicap) : undefined;
+    const isNetAdjusted = netScore !== undefined && netScore !== score;
+    const isAutoEagle = par !== null && netScore !== undefined && netScore <= par - 2;
+    const isAutoBirdie = par !== null && netScore !== undefined && netScore === par - 1;
 
     const isAutoRef = useRef(false);
     useEffect(() => {
-        if (par !== null && score !== undefined && score > 0) {
-            const autoVal = score < par;
+        if (par !== null && netScore !== undefined) {
+            const autoVal = netScore < par;
             if (autoVal !== isBirdie && !isAutoRef.current) {
                 isAutoRef.current = true;
                 onBirdieToggle(player.id, autoVal);
                 isAutoRef.current = false;
             }
         }
-    }, [score, par, isBirdie, onBirdieToggle, player.id]);
+    }, [netScore, par, isBirdie, onBirdieToggle, player.id]);
 
     const initials = player.name.slice(0, 2).toUpperCase();
 
-    const diffFromPar = par !== null && score !== undefined ? score - par : null;
+    const diffFromPar = par !== null && netScore !== undefined ? netScore - par : null;
 
     const diffLabel = diffFromPar === null
         ? ''
@@ -104,6 +108,11 @@ export function PlayerScoreCard({
                         <Text style={styles.editIcon}>✎</Text>
                     </View>
                     <Text style={[styles.totalScore, { color: teamDeep }]}>{totalDisplay}pt</Text>
+                    {hasHandicap(handicap) && (
+                        <Text style={styles.handicapText} numberOfLines={1}>
+                            {formatHandicap(handicap, i18n.language === 'en' ? 'en' : 'ja')}
+                        </Text>
+                    )}
                 </TouchableOpacity>
                 <View style={styles.badgeColumn}>
                     {(isAutoEagle || isAutoBirdie) && (
@@ -130,7 +139,9 @@ export function PlayerScoreCard({
                         {score !== undefined ? score : (par ?? '—')}
                     </Text>
                     {diffLabel !== '' && (
-                        <Text style={[styles.diffLabel, { color: diffColor }]}>{diffLabel}</Text>
+                        <Text style={[styles.diffLabel, { color: diffColor }]}>
+                            {isNetAdjusted ? `${t('setup.net', { score: netScore })} · ${diffLabel}` : diffLabel}
+                        </Text>
                     )}
                 </View>
                 <TouchableOpacity onPress={increment} style={[styles.stepBtn, { borderColor: C.line }]}>
@@ -189,6 +200,7 @@ const styles = StyleSheet.create({
     playerName: { fontSize: 12, fontWeight: '700', color: C.ink, lineHeight: 15, flexShrink: 1 },
     editIcon: { fontSize: 10, color: C.ink4, lineHeight: 15 },
     totalScore: { fontSize: 10, fontWeight: '700' },
+    handicapText: { fontSize: 10, color: C.ink3 },
     birdieBadgeText: { fontSize: 13 },
     badgeColumn: { alignItems: 'center', gap: 4 },
     teamBadge: {

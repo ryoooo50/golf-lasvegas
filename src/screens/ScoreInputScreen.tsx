@@ -10,22 +10,25 @@ import { ParSelectDialog } from '../components/score-input/ParSelectDialog';
 import { PlayerScoreCard } from '../components/score-input/PlayerScoreCard';
 import { ResultSummaryDialog } from '../components/score-input/ResultSummaryDialog';
 import { BottomTabBar } from '../components/shared/BottomTabBar';
+import { HandicapDialog } from '../components/shared/HandicapDialog';
 import { SyncStatusBanner } from '../components/shared/SyncStatusBanner';
 import { C } from '../theme/colors';
 import { getRoundHoleSequence, useGameStore } from '../store/gameStore';
-import { HoleResult, PlayerId, SaveRoundResult, ScoreInput } from '../types';
+import { HoleResult, Player, PlayerId, SaveRoundResult, ScoreInput } from '../types';
 import { confirmAction, notify } from '../utils/dialogs';
 import { calculateLivePreview } from '../utils/golfLogic';
+import { buildScoreInput, formatHandicap, grossScoreOf } from '../utils/handicap';
 
 export const ScoreInputScreen = () => {
     const router = useRouter();
     const {
         players, currentHole, nextHoleMultiplier, completeHole, settings,
-        getRecommendedPairs, getPlayerTotalScore, updatePlayerName,
+        getRecommendedPairs, getPlayerTotalScore, updatePlayerName, setPlayerHandicap,
         getRemainingPushForPlayer, goToHole, resetHole, history,
         saveDraft, pauseCurrentRound, startHole,
     } = useGameStore();
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+    const language = i18n.language === 'en' ? 'en' : 'ja';
     const bgScrollRef = useRef<ScrollView>(null);
 
     const [par, setPar] = useState<number | null>(null);
@@ -39,6 +42,7 @@ export const ScoreInputScreen = () => {
     const [editingPlayerId, setEditingPlayerId] = useState<PlayerId | null>(null);
     const [editingName, setEditingName] = useState('');
     const [isHelpVisible, setIsHelpVisible] = useState(false);
+    const [isHandicapDialogVisible, setIsHandicapDialogVisible] = useState(false);
     // 確定したホールの結果。確定直後に currentHole が次ホールへ進み teamAssignments も
     // 次ホールの推奨ペアに置き換わるため、表示用のチーム情報も確定時点のものを保持する。
     const [lastHoleResult, setLastHoleResult] = useState<HoleResult | null>(null);
@@ -58,7 +62,7 @@ export const ScoreInputScreen = () => {
             const savedAssignments: Record<PlayerId, 'A' | 'B'> = {};
 
             Object.entries(savedHole.scores).forEach(([pid, val]) => {
-                savedScores[pid] = val.score;
+                savedScores[pid] = grossScoreOf(val);
                 savedBirdie[pid] = val.isBirdie;
                 savedPush[pid] = val.pushCount || 0;
             });
@@ -143,6 +147,14 @@ export const ScoreInputScreen = () => {
         hole === currentHole || history.some(result => result.holeNumber === hole),
     );
 
+    // 実打数からハンデ適用後の ScoreInput を作る。バーディー/イーグルはハンデ適用後で判定する
+    const toScoreInput = (player: Player, gross: number, parValue: number): ScoreInput => buildScoreInput({
+        gross,
+        par: parValue,
+        pushCount: pushCounts[player.id] || 0,
+        handicap: player.type === 'bogey_kun' ? undefined : player.handicap,
+    });
+
     const livePreview = useMemo(() => {
         const currentCOLevel = nextHoleMultiplier === 1 ? 0 : nextHoleMultiplier / 2;
         const coMultFb = currentCOLevel * 2;
@@ -152,14 +164,9 @@ export const ScoreInputScreen = () => {
         const previewScores: Record<PlayerId, Partial<ScoreInput>> = {};
         players.forEach(p => {
             const s = scores[p.id];
-            const isEagle = par !== null && s !== undefined && s <= par - 2;
-            const isBirdie = isEagle || (birdieFlags[p.id] ?? false) || (par !== null && s !== undefined && s === par - 1);
-            previewScores[p.id] = {
-                score: s,
-                isBirdie,
-                isEagle,
-                pushCount: pushCounts[p.id] || 0,
-            };
+            previewScores[p.id] = s === undefined
+                ? { pushCount: pushCounts[p.id] || 0 }
+                : toScoreInput(p, s, par);
         });
         return calculateLivePreview(
             currentCOLevel,
@@ -168,7 +175,9 @@ export const ScoreInputScreen = () => {
             [teamB[0].id, teamB[1].id],
             par,
         );
-    }, [scores, birdieFlags, pushCounts, par, nextHoleMultiplier, teamA, teamB, players, isValidTeams]);
+        // toScoreInput は pushCounts のみに依存するため依存配列には含めない
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scores, pushCounts, par, nextHoleMultiplier, teamA, teamB, players, isValidTeams]);
 
     const liveMultiplier = livePreview.finalMultiplier;
 
@@ -230,15 +239,7 @@ export const ScoreInputScreen = () => {
 
         const scoreInputs: Record<PlayerId, ScoreInput> = {};
         players.forEach(p => {
-            const s = scores[p.id] || 0;
-            const isEagle = par !== null && s <= par - 2;
-            const isBirdie = isEagle || (birdieFlags[p.id] ?? false) || (par !== null && s === par - 1);
-            scoreInputs[p.id] = {
-                score: s,
-                isBirdie,
-                isEagle,
-                pushCount: pushCounts[p.id] || 0,
-            };
+            scoreInputs[p.id] = toScoreInput(p, scores[p.id] || 0, par);
         });
 
         const warning = getInputWarning(scoreInputs);
@@ -332,6 +333,9 @@ export const ScoreInputScreen = () => {
         if (editingPlayerId && editingName.trim()) updatePlayerName(editingPlayerId, editingName.trim());
         setIsNameDialogVisible(false);
     };
+
+    const editingPlayer = players.find(p => p.id === editingPlayerId);
+    const canEditHandicap = editingPlayer !== undefined && editingPlayer.type !== 'bogey_kun';
 
     return (
         <View style={styles.root}>
@@ -482,11 +486,32 @@ export const ScoreInputScreen = () => {
                 rate={settings.rate}
             />
 
+            <HandicapDialog
+                visible={isHandicapDialogVisible}
+                playerName={editingPlayer?.name ?? ''}
+                value={editingPlayer?.handicap}
+                onDismiss={() => setIsHandicapDialogVisible(false)}
+                onSave={handicap => {
+                    if (editingPlayerId) setPlayerHandicap(editingPlayerId, handicap);
+                    setIsHandicapDialogVisible(false);
+                }}
+            />
+
             <Portal>
                 <Dialog visible={isNameDialogVisible} onDismiss={() => setIsNameDialogVisible(false)}>
                     <Dialog.Title>{t('common.editName')}</Dialog.Title>
                     <Dialog.Content>
                         <TextInput label={t('common.name')} value={editingName} onChangeText={setEditingName} autoFocus />
+                        {canEditHandicap && (
+                            <Button
+                                mode="text"
+                                compact
+                                onPress={() => { setIsNameDialogVisible(false); setIsHandicapDialogVisible(true); }}
+                                style={{ alignSelf: 'flex-start', marginTop: 8 }}
+                            >
+                                {t('setup.handicapButton', { value: formatHandicap(editingPlayer?.handicap, language) })}
+                            </Button>
+                        )}
                     </Dialog.Content>
                     <Dialog.Actions>
                         <Button onPress={() => setIsNameDialogVisible(false)}>{t('common.cancel')}</Button>

@@ -9,6 +9,7 @@ import { ScreenHeader } from '../components/shared/ScreenHeader';
 import { C } from '../theme/colors';
 import { useGameStore } from '../store/gameStore';
 import { HoleResult, Player, PlayerId } from '../types';
+import { grossScoreOf } from '../utils/handicap';
 
 const HOLE_COL_WIDTH = 34;
 const SUB_COL_WIDTH = 46;
@@ -42,7 +43,7 @@ export const ScorecardScreen = () => {
     const scoreFor = (playerId: PlayerId, holeNumber: number) => {
         const hole = holeMap.get(holeNumber);
         if (!hole) return null;
-        return hole.scores[playerId]?.score ?? null;
+        return grossScoreOf(hole.scores[playerId]) ?? null;
     };
     const pushedFor = (playerId: PlayerId, holeNumber: number) => {
         const hole = holeMap.get(holeNumber);

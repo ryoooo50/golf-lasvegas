@@ -8,20 +8,34 @@ import { getPool } from './db.js';
 
 const ORIGIN = 'http://localhost:3000';
 const RUN_ID = Date.now().toString(36);
+const ADMIN_EMAIL = `admin-${RUN_ID}@example.com`;
+process.env.ADMIN_EMAILS = ADMIN_EMAIL;
 
-function authRequest(path: string, body: unknown): Promise<Response> {
+function authRequest(path: string, body: unknown, cookie?: string): Promise<Response> {
     // vercel.json の書き換え後と同じ形（/api/auth?__path=...）で呼ぶ
     return authApi.POST(new Request(`${ORIGIN}/api/auth?__path=${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
+        headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...(cookie ? { Cookie: cookie } : {}) },
         body: JSON.stringify(body),
     }));
+}
+
+function authGet(path: string, cookie: string): Promise<Response> {
+    return authApi.GET(new Request(`${ORIGIN}/api/auth?__path=${path}`, { headers: { Cookie: cookie } }));
+}
+
+function sessionCookie(response: Response): string {
+    return response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+}
+
+async function sessionUser(cookie: string): Promise<{ id: string; email: string; role?: string }> {
+    return (await (await authGet('get-session', cookie)).json()).user;
 }
 
 async function signUp(email: string, password = 'password123'): Promise<string> {
     const response = await authRequest('sign-up/email', { email, password, name: email });
     assert.equal(response.status, 200, await response.clone().text());
-    const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    const cookie = sessionCookie(response);
     assert.ok(cookie.includes('session_token'), 'session cookie should be set');
     return cookie;
 }
@@ -126,5 +140,80 @@ describe('api', { skip: !process.env.DATABASE_URL }, () => {
         assert.equal((await roundsRequest('POST', alice, { body: { ...ROUND, status: 'bogus' } })).status, 400);
         assert.equal((await roundsRequest('POST', alice, { body: { memo: 'only' } })).status, 400);
         assert.equal((await roundsRequest('POST', alice, { body: { ...ROUND, rate: 'ten' } })).status, 400);
+    });
+
+    describe('admin', () => {
+        let admin: string;
+
+        before(async () => {
+            admin = await signUp(ADMIN_EMAIL);
+        });
+
+        test('a user listed in ADMIN_EMAILS becomes admin, others are users', async () => {
+            assert.equal((await sessionUser(admin)).role, 'admin');
+            assert.equal((await sessionUser(bob)).role, 'user');
+        });
+
+        test('only admins can list users', async () => {
+            const asAdmin = await authGet('admin/list-users&limit=100', admin);
+            assert.equal(asAdmin.status, 200);
+            const { users } = await asAdmin.json();
+            assert.ok(users.some((u: { email: string }) => u.email === `bob-${RUN_ID}@example.com`));
+            assert.equal((await authGet('admin/list-users', bob)).status, 403);
+        });
+
+        test('an existing user added to ADMIN_EMAILS is promoted on next sign-in', async () => {
+            const email = `late-${RUN_ID}@example.com`;
+            await signUp(email);
+            process.env.ADMIN_EMAILS = `${ADMIN_EMAIL}, ${email.toUpperCase()}`;
+            try {
+                const response = await authRequest('sign-in/email', { email, password: 'password123' });
+                assert.equal(response.status, 200);
+                assert.equal((await sessionUser(sessionCookie(response))).role, 'admin');
+            } finally {
+                process.env.ADMIN_EMAILS = ADMIN_EMAIL;
+            }
+        });
+
+        test('a banned user cannot sign in until unbanned', async () => {
+            const email = `banned-${RUN_ID}@example.com`;
+            const cookie = await signUp(email);
+            const { id } = await sessionUser(cookie);
+            assert.equal((await authRequest('admin/ban-user', { userId: id }, admin)).status, 200);
+            const blocked = await authRequest('sign-in/email', { email, password: 'password123' });
+            assert.equal(blocked.status, 403);
+            assert.equal((await blocked.json()).code, 'BANNED_USER');
+            assert.equal((await authRequest('admin/unban-user', { userId: id }, admin)).status, 200);
+            assert.equal((await authRequest('sign-in/email', { email, password: 'password123' })).status, 200);
+        });
+
+        test('admin can reset a password', async () => {
+            const email = `reset-${RUN_ID}@example.com`;
+            const { id } = await sessionUser(await signUp(email));
+            const response = await authRequest('admin/set-user-password', { userId: id, newPassword: 'newpassword1' }, admin);
+            assert.equal(response.status, 200);
+            assert.equal((await authRequest('sign-in/email', { email, password: 'newpassword1' })).status, 200);
+        });
+
+        test('admin cannot impersonate users', async () => {
+            const { id } = await sessionUser(bob);
+            assert.equal((await authRequest('admin/impersonate-user', { userId: id }, admin)).status, 403);
+        });
+
+        test('non-admins cannot use admin actions', async () => {
+            const { id } = await sessionUser(alice);
+            assert.equal((await authRequest('admin/ban-user', { userId: id }, bob)).status, 403);
+            assert.equal((await authRequest('admin/set-role', { userId: (await sessionUser(bob)).id, role: 'admin' }, bob)).status, 403);
+        });
+
+        test('removing a user also removes their rounds', async () => {
+            const email = `removed-${RUN_ID}@example.com`;
+            const cookie = await signUp(email);
+            const { id } = await sessionUser(cookie);
+            assert.equal((await roundsRequest('POST', cookie, { body: ROUND })).status, 201);
+            assert.equal((await authRequest('admin/remove-user', { userId: id }, admin)).status, 200);
+            const { rows } = await getPool().query('select count(*)::int as n from rounds where user_id = $1', [id]);
+            assert.equal(rows[0].n, 0);
+        });
     });
 });

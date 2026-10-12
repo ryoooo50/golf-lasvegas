@@ -10,10 +10,21 @@ export type ScoreCategory = 'normal' | 'birdie' | 'eagle';
 // 'bogey_kun' は3人モード用の仮想プレイヤー（常にpar+1を打つ）
 export type PlayerType = 'real' | 'bogey_kun';
 
+// ─── ハンデ ────────────────────────────────────────────────────────
+// strokes: 毎ホール引く打数（1=エブリワン, 2=エブリツー）
+// floor: 縛り。ハンデを引いてもこのスコアより良くはならない（'par'=パー, 'bogey'=ボギー）
+export type HandicapFloor = 'none' | 'par' | 'bogey';
+
+export interface PlayerHandicap {
+  strokes: number;
+  floor: HandicapFloor;
+}
+
 export interface Player {
   id: PlayerId;
   name: string;
   type?: PlayerType; // 未指定の場合は 'real' とみなす
+  handicap?: PlayerHandicap; // 未指定ならハンデなし
   pushUsageCount: {
     front9: number; // OUT (1-9)
     back9: number;  // IN (10-18)
@@ -39,7 +50,9 @@ export interface GameSettings {
 }
 
 export interface ScoreInput {
-  score: number;
+  score: number;       // 計算に使うスコア（ハンデ適用後）
+  grossScore?: number; // 実際の打数。ハンデを適用したホールのみ記録
+  handicap?: PlayerHandicap; // 適用したハンデ（再開時の復元用）
   isBirdie: boolean; // バーディー（パー-1）以上ならtrue（自動判定 or 手動設定）
   isEagle: boolean;  // イーグル（パー-2以下）またはホールインワンならtrue
   pushCount: number; // このホールでプッシュ権を何回行使するか (0 = なし)

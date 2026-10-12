@@ -5,19 +5,20 @@ import { useTranslation } from "react-i18next";
 import { Alert, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Button, RadioButton, Text, TextInput } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { HandicapDialog } from "../components/shared/HandicapDialog";
 import { PlayerNamesForm } from "../components/shared/PlayerNamesForm";
 import { SyncStatusBanner } from "../components/shared/SyncStatusBanner";
 import { useAuthStore } from "../store/authStore";
 import { useGameStore } from "../store/gameStore";
 import { C } from "../theme/colors";
-import { Player } from "../types";
+import { Player, PlayerHandicap } from "../types";
 
 const DEFAULT_PLAYER_NAMES = ["Player 1", "Player 2", "Player 3", "Player 4"];
 
 export const StartScreen = () => {
   const router = useRouter();
   const {
-    startGame, updateSettings, updatePlayerName, settings, players,
+    startGame, updateSettings, updatePlayerName, setPlayerHandicap, settings, players,
     savedRounds, resumeRound, resetGame, playerProfiles, togglePlayerFavorite,
   } = useGameStore();
   const { signOut, user, isGuest } = useAuthStore();
@@ -51,6 +52,19 @@ export const StartScreen = () => {
     players[2]?.name ?? DEFAULT_PLAYER_NAMES[2],
     players[3]?.name ?? DEFAULT_PLAYER_NAMES[3],
   ]);
+
+  const [handicaps, setHandicaps] = useState<(PlayerHandicap | undefined)[]>(
+    Array.from({ length: 4 }, (_, i) =>
+      players[i]?.type === "bogey_kun" ? undefined : players[i]?.handicap,
+    ),
+  );
+  const [editingHandicapIndex, setEditingHandicapIndex] = useState<number | null>(null);
+
+  const handleHandicapSave = (handicap: PlayerHandicap | undefined) => {
+    if (editingHandicapIndex === null) return;
+    setHandicaps((prev) => prev.map((value, i) => (i === editingHandicapIndex ? handicap : value)));
+    setEditingHandicapIndex(null);
+  };
 
   const handlePlayerNameChange = (index: number, value: string) => {
     setPlayerNames((prev) => {
@@ -101,6 +115,7 @@ export const StartScreen = () => {
     newPlayers.forEach((p, i) => {
       if (players[i]) {
         updatePlayerName(players[i].id, p.name);
+        setPlayerHandicap(players[i].id, p.type === "bogey_kun" ? undefined : handicaps[i]);
       }
     });
 
@@ -349,6 +364,8 @@ export const StartScreen = () => {
               names={playerNames}
               playerCount={playerCount}
               onChange={handlePlayerNameChange}
+              handicaps={handicaps}
+              onHandicapPress={setEditingHandicapIndex}
             />
 
             {visiblePlayerProfiles.length > 0 && (
@@ -431,6 +448,16 @@ export const StartScreen = () => {
           >
             {t("common.viewHistory")}
           </Button>
+          {user?.isAdmin && (
+            <Button
+              mode="outlined"
+              icon="account-cog"
+              style={styles.historyButton}
+              onPress={() => router.push("/admin")}
+            >
+              {t("admin.open")}
+            </Button>
+          )}
           {(user || isGuest) && (
             <Button
               mode="text"
@@ -445,6 +472,18 @@ export const StartScreen = () => {
 
         <Text style={styles.footer}>© 2026 Golf LasVegas</Text>
       </SafeAreaView>
+
+      <HandicapDialog
+        visible={editingHandicapIndex !== null}
+        playerName={
+          editingHandicapIndex !== null
+            ? playerNames[editingHandicapIndex] || DEFAULT_PLAYER_NAMES[editingHandicapIndex]
+            : ""
+        }
+        value={editingHandicapIndex !== null ? handicaps[editingHandicapIndex] : undefined}
+        onDismiss={() => setEditingHandicapIndex(null)}
+        onSave={handleHandicapSave}
+      />
     </View>
   );
 };

@@ -387,3 +387,72 @@ describe('claimLegacyLocalData', () => {
         expect(profiles.every(p => p.ownerId === NEW_ID)).toBe(true);
     });
 });
+
+describe('player handicap', () => {
+    beforeEach(() => {
+        startFreshGame();
+    });
+
+    test('sets and clears a player handicap', () => {
+        useGameStore.getState().setPlayerHandicap('p2', { strokes: 1, floor: 'par' });
+        expect(useGameStore.getState().players.find(p => p.id === 'p2')?.handicap).toEqual({ strokes: 1, floor: 'par' });
+
+        useGameStore.getState().setPlayerHandicap('p2', { strokes: 0, floor: 'par' });
+        expect(useGameStore.getState().players.find(p => p.id === 'p2')?.handicap).toBeUndefined();
+    });
+
+    test('keeps the handicap when a new game starts', () => {
+        useGameStore.getState().setPlayerHandicap('p1', { strokes: 2, floor: 'bogey' });
+        useGameStore.getState().startGame(1);
+        expect(useGameStore.getState().players.find(p => p.id === 'p1')?.handicap).toEqual({ strokes: 2, floor: 'bogey' });
+    });
+
+    test('restores the handicap of a cloud round from its hole history', async () => {
+        const { useAuthStore } = jest.requireMock('./authStore');
+        const cloudSave = jest.requireMock('../services/cloudSave');
+        useAuthStore.getState.mockReturnValueOnce({ user: { id: 'user-1' } });
+        const handicap = { strokes: 1, floor: 'none' };
+        cloudSave.loadUserRounds.mockResolvedValueOnce([{
+            id: 'cloud-1',
+            user_id: 'user-1',
+            created_at: '2026-10-01T00:00:00Z',
+            updated_at: '2026-10-01T00:00:00Z',
+            match_name: 'Cloud',
+            rate: 10,
+            player_count: 4,
+            player_names: { p1: 'A', p2: 'B', p3: 'C', p4: 'D' },
+            push_limit: 2,
+            push_recovery_on_birdie: 1,
+            push_recovery_on_eagle: 2,
+            holes: [{
+                holeNumber: 1,
+                par: 4,
+                scores: {
+                    p1: { score: 4, grossScore: 5, handicap, isBirdie: false, isEagle: false, pushCount: 0 },
+                    p2: scoreInput(4),
+                    p3: scoreInput(4),
+                    p4: scoreInput(4),
+                },
+                teamA_Ids: ['p1', 'p2'],
+                teamB_Ids: ['p3', 'p4'],
+                pointsResult: {},
+            }],
+            total_points: {},
+            status: 'paused',
+            current_hole: 2,
+            start_hole: 1,
+            round_length: 18,
+            draft_hole: null,
+            player_ranking: [],
+            course_name: '',
+            played_at: '',
+            memo: '',
+        }]);
+
+        await useGameStore.getState().loadCloudRounds();
+
+        const round = useGameStore.getState().savedRounds.find(r => r.id === 'cloud-1');
+        expect(round?.players.find(p => p.id === 'p1')?.handicap).toEqual(handicap);
+        expect(round?.players.find(p => p.id === 'p2')?.handicap).toBeUndefined();
+    });
+});

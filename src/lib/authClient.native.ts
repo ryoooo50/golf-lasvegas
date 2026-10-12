@@ -1,6 +1,7 @@
 // iOS / Android 用。セッションは SecureStore に保存し、API には Cookie ヘッダーで渡す。
 import { expoClient } from '@better-auth/expo/client';
 import { createAuthClient } from 'better-auth/client';
+import { adminClient } from 'better-auth/client/plugins';
 import * as SecureStore from 'expo-secure-store';
 import { getApiBaseUrl } from './apiBase';
 
@@ -13,6 +14,7 @@ export const authClient = createAuthClient({
             storagePrefix: 'golflasvegas',
             storage: SecureStore,
         }),
+        adminClient(),
     ],
 });
 
