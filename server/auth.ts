@@ -17,6 +17,18 @@ function deploymentOrigins(): string[] {
     return [...hosts.map(host => `https://${host}`), ...extra];
 }
 
+// 同じデプロイには複数の URL（本番ドメイン・*-projects.vercel.app などの別名）が付くため、
+// リクエスト自身のオリジンも信頼する。Origin ヘッダーがこれと一致するのは同一オリジンの
+// リクエストだけなので、他サイトからのリクエストは引き続き拒否される。
+function requestOrigin(request: Request | undefined): string | undefined {
+    if (!request) return undefined;
+    try {
+        return new URL(request.url).origin;
+    } catch {
+        return undefined;
+    }
+}
+
 export const ADMIN_ROLE = 'admin';
 export const USER_ROLE = 'user';
 
@@ -93,7 +105,7 @@ function createAuth() {
                 },
             },
         },
-        trustedOrigins: [APP_SCHEME, ...deploymentOrigins()],
+        trustedOrigins: (request) => [APP_SCHEME, ...deploymentOrigins(), requestOrigin(request)],
     });
 }
 

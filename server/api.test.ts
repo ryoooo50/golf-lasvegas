@@ -101,6 +101,26 @@ describe('api', { skip: !process.env.DATABASE_URL }, () => {
         assert.equal((await response.json()).user.email, `alice-${RUN_ID}@example.com`);
     });
 
+    test('accepts sign-in from another alias of the same deployment (same-origin)', async () => {
+        const alias = 'https://golf-lasvegas-alias.example.app';
+        const response = await authApi.POST(new Request(`${alias}/api/auth?__path=sign-in/email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Origin: alias },
+            body: JSON.stringify({ email: `alice-${RUN_ID}@example.com`, password: 'password123' }),
+        }));
+        assert.equal(response.status, 200, await response.clone().text());
+    });
+
+    test('rejects sign-in posted from a different site', async () => {
+        const response = await authApi.POST(new Request(`${ORIGIN}/api/auth?__path=sign-in/email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example.com' },
+            body: JSON.stringify({ email: `alice-${RUN_ID}@example.com`, password: 'password123' }),
+        }));
+        assert.equal(response.status, 403);
+        assert.equal((await response.json()).code, 'INVALID_ORIGIN');
+    });
+
     test('rounds require a session', async () => {
         assert.equal((await roundsRequest('GET', null)).status, 401);
     });
