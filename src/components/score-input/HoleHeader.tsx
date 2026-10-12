@@ -14,6 +14,7 @@ interface HoleHeaderProps {
     canGoPrev: boolean;
     canGoNext: boolean;
     history: HoleResult[];
+    holeNumbers: number[];
     onPrevHole: () => void;
     onNextHole: () => void;
     onParPress: () => void;
@@ -22,7 +23,7 @@ interface HoleHeaderProps {
 }
 
 export const HoleHeader: React.FC<HoleHeaderProps> = ({
-    currentHole, par, liveMultiplier, isFront9, canGoPrev, canGoNext, history,
+    currentHole, par, liveMultiplier, isFront9, canGoPrev, canGoNext, history, holeNumbers,
     onPrevHole, onNextHole, onParPress, onHelpPress, onHalfToggle,
 }) => {
     const { t } = useTranslation();
@@ -33,7 +34,7 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
         <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
             {/* 前後半タブ + ヘルプボタン */}
             <View style={styles.topRow}>
-                <View style={styles.halfToggle}>
+                {holeNumbers.length === 18 ? <View style={styles.halfToggle}>
                     <TouchableOpacity
                         onPress={() => onHalfToggle('front')}
                         style={[styles.halfBtn, isFront9 && styles.halfBtnActive]}
@@ -50,7 +51,7 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
                             IN 10-18
                         </Text>
                     </TouchableOpacity>
-                </View>
+                </View> : <Text style={styles.nineHoleLabel}>9 HOLES</Text>}
                 <TouchableOpacity onPress={onHelpPress} style={styles.toolBtn}>
                     <Text style={styles.toolBtnText}>?</Text>
                 </TouchableOpacity>
@@ -70,7 +71,7 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
                     <View style={styles.holeNumRow}>
                         <Text style={styles.holeNum}>{String(currentHole).padStart(2, '0')}</Text>
                         <View style={styles.holeMeta}>
-                            <Text style={styles.holeLabel}>HOLE / 18</Text>
+                            <Text style={styles.holeLabel}>HOLE / {holeNumbers.length}</Text>
                             <Text style={styles.parLabel}>
                                 {par ? `PAR ${par}` : t('common.tapToChange')}
                             </Text>
@@ -95,15 +96,14 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
                 </TouchableOpacity>
             </View>
 
-            {/* 18ドット進捗 */}
+            {/* ラウンド進捗 */}
             <View style={styles.dotsRow}>
-                {Array.from({ length: 18 }).map((_, i) => {
-                    const holeNum = i + 1;
+                {holeNumbers.map((holeNum) => {
                     const isDone = history.some(h => h.holeNumber === holeNum);
                     const isCurrent = holeNum === currentHole;
                     return (
                         <View
-                            key={i}
+                            key={holeNum}
                             style={[
                                 styles.dot,
                                 isDone ? styles.dotDone : isCurrent ? styles.dotCurrent : styles.dotEmpty,
@@ -114,7 +114,7 @@ export const HoleHeader: React.FC<HoleHeaderProps> = ({
             </View>
 
             <View style={styles.completedRow}>
-                <Text style={styles.completedText}>{completedHoles}/18 {t('common.holesPlayed')}</Text>
+                <Text style={styles.completedText}>{completedHoles}/{holeNumbers.length} {t('common.holesPlayed')}</Text>
             </View>
         </SafeAreaView>
     );
@@ -137,6 +137,7 @@ const styles = StyleSheet.create({
         padding: 2,
         gap: 2,
     },
+    nineHoleLabel: { color: 'rgba(255,255,255,0.65)', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
     halfBtn: {
         paddingHorizontal: 10,
         paddingVertical: 4,

@@ -4,8 +4,9 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import i18n from '../i18n/i18n';
 import * as cloudSave from '../services/cloudSave';
 import { useAuthStore } from './authStore';
-import { GameState, HoleResult, PendingCloudSave, Player, PlayerId, RoundResult, SaveRoundResult, ScoreInput } from '../types';
+import { GameState, HoleDraft, HoleResult, PendingCloudSave, Player, PlayerId, PlayerProfile, RoundResult, RoundStatus, SaveRoundResult, ScoreInput } from '../types';
 import { calculateHoleResult } from '../utils/golfLogic';
+import { computeRankingForHole } from '../utils/teamRanking';
 import { BOGEY_KUN_ID, applySoloPlayerPointMultiplier, computeTeamPairs, findSoloPlayer } from '../utils/threePlayerMode';
 
 // ─── ボギーくんプレイヤー定義 ────────────────────────────────────────
@@ -15,40 +16,6 @@ const BOGEY_KUN_PLAYER: Player = {
     type: 'bogey_kun',
     pushUsageCount: { front9: 0, back9: 0 },
 };
-
-// ─── ヘルパー: ランク付け ─────────────────────────────────────────────
-/**
- * 個人スコア（ホール累計ポイント）でプレイヤーをランク付けする。
- * 低スコア（ポイント少ない）ほど上位。同スコアの場合は現在のランク順を維持（stable sort）。
- *
- * @param playerIds    現在のプレイヤーIDリスト（P1→P4 順）
- * @param history      確定済みホール結果リスト
- * @param currentRanking 直前のランキング（同スコア時の安定ソート基準）
- */
-function computeNextRanking(
-    playerIds: PlayerId[],
-    history: HoleResult[],
-    currentRanking: PlayerId[],
-): PlayerId[] {
-    // 累計ポイントを計算
-    const totalPoints: Record<PlayerId, number> = {};
-    for (const id of playerIds) {
-        totalPoints[id] = history.reduce((sum, h) => sum + (h.pointsResult[id] ?? 0), 0);
-    }
-
-    // 現在のランキングが空の場合は playerIds 順を初期順とする
-    const rankBase = currentRanking.length > 0 ? currentRanking : playerIds;
-
-    // 安定ソート: 同ポイントなら rankBase の順序を維持
-    const sorted = [...playerIds].sort((a, b) => {
-        const diff = (totalPoints[a] ?? 0) - (totalPoints[b] ?? 0);
-        if (diff !== 0) return diff;
-        // 同スコア: 前回ランクの順序で安定
-        return rankBase.indexOf(a) - rankBase.indexOf(b);
-    });
-
-    return sorted;
-}
 
 /**
  * プッシュ残り回数を返す。
@@ -72,6 +39,11 @@ function buildRoundSaveData(
     settings: GameState['settings'],
     history: HoleResult[],
     finalScores: Record<PlayerId, number>,
+    status: RoundStatus,
+    currentHole: number,
+    startHole: 1 | 10,
+    draftHole: HoleDraft | null,
+    playerRanking: PlayerId[],
 ): cloudSave.RoundSaveData {
     const playerNames: Record<string, string> = {};
     const totalPoints: Record<string, number> = {};
@@ -91,7 +63,57 @@ function buildRoundSaveData(
         push_recovery_on_eagle: settings.pushRecoveryOnEagle,
         holes: history,
         total_points: totalPoints,
+        status,
+        current_hole: currentHole,
+        start_hole: startHole,
+        round_length: settings.roundLength,
+        draft_hole: draftHole,
+        player_ranking: playerRanking,
+        course_name: settings.courseName,
+        played_at: settings.playedAt,
+        memo: settings.memo,
     };
+}
+
+function updatePlayerProfiles(profiles: PlayerProfile[], names: string[], ownerId: string): PlayerProfile[] {
+    const now = new Date().toISOString();
+    const next = [...profiles];
+    for (const rawName of names) {
+        const name = rawName.trim();
+        if (!name || name === 'ボギーくん') continue;
+        const existingIndex = next.findIndex(profile =>
+            profile.ownerId === ownerId && profile.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+        );
+        if (existingIndex >= 0) {
+            next[existingIndex] = {
+                ...next[existingIndex],
+                name,
+                useCount: next[existingIndex].useCount + 1,
+                lastUsedAt: now,
+                ownerId,
+            };
+        } else {
+            next.push({
+                id: createLocalId('player'),
+                name,
+                isFavorite: false,
+                useCount: 1,
+                lastUsedAt: now,
+                ownerId,
+            });
+        }
+    }
+    return next.sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || b.useCount - a.useCount || b.lastUsedAt.localeCompare(a.lastUsedAt));
+}
+
+export function getRoundHoleSequence(startHole: 1 | 10, roundLength: 9 | 18): number[] {
+    const fullSequence = startHole === 1
+        ? Array.from({ length: 18 }, (_, index) => index + 1)
+        : [
+            ...Array.from({ length: 9 }, (_, index) => index + 10),
+            ...Array.from({ length: 9 }, (_, index) => index + 1),
+        ];
+    return fullSequence.slice(0, roundLength);
 }
 
 function rebuildPushStateFromHistory(
@@ -205,9 +227,18 @@ function buildPushStateForHoleHalf(
     return { pushUsed, pushBonus };
 }
 
+// 旧 Supabase のユーザー ID は UUID。Better Auth の ID は UUID 形式ではない。
+const LEGACY_SUPABASE_USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isLegacyOwner(ownerId: string | undefined, userId: string): boolean {
+    return ownerId !== undefined && ownerId !== userId && LEGACY_SUPABASE_USER_ID.test(ownerId);
+}
+
 // ─── アクション型定義 ──────────────────────────────────────────────────
 interface GameActions {
     addPlayer: (name: string) => void;
+    rememberPlayerProfiles: (names: string[]) => void;
+    togglePlayerFavorite: (profileId: string) => void;
     updateSettings: (settings: Partial<GameState['settings']>) => void;
     setLanguage: (lang: 'en' | 'ja') => void;
 
@@ -238,8 +269,8 @@ interface GameActions {
 
     /**
      * 推奨チームペアを返す。
-     * 動的ランキング（playerRanking）と (holeNumber-1)%3 パターンで決定する。
-     * playerRanking が空（ゲーム開始直後）の場合は players 配列順を使用。
+     * 前ホールの打数順（P1〜P4）と (holeNumber-1)%3 パターンで決定する。
+     * 最初のホールは players 配列順（開始時の入力順）。
      */
     getRecommendedPairs: (holeNumber: number) => { teamA: [PlayerId, PlayerId]; teamB: [PlayerId, PlayerId] };
 
@@ -254,11 +285,20 @@ interface GameActions {
     goToHole: (holeNumber: number) => void;
     resetHole: (holeNumber: number) => void;
     startGame: (startHole: 1 | 10) => void;
-    saveCurrentRound: () => Promise<SaveRoundResult>;
+    saveDraft: (draft: HoleDraft | null) => void;
+    saveCurrentRound: (status?: RoundStatus) => Promise<SaveRoundResult>;
+    pauseCurrentRound: () => Promise<SaveRoundResult>;
+    finishCurrentRound: () => Promise<SaveRoundResult>;
     deleteSavedRound: (roundId: string) => Promise<{ cloudStatus: 'deleted' | 'queued' | 'local-only' }>;
     resumeRound: (roundId: string) => void;
+    duplicateRound: (roundId: string) => void;
     loadCloudRounds: () => Promise<void>;
     syncPendingCloudSaves: () => Promise<void>;
+    /**
+     * 旧 Supabase アカウント（UUID 形式の ID）に紐付いた端末内の履歴・プレイヤー候補を
+     * ログイン中のアカウントへ引き継ぎ、ラウンドはクラウドへの再アップロードを予約する。
+     */
+    claimLegacyLocalData: (userId: string) => void;
 }
 
 type GameStore = GameState & GameActions;
@@ -274,6 +314,9 @@ const DEFAULT_PLAYERS: Player[] = [
 const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
     players: DEFAULT_PLAYERS,
     currentHole: 1,
+    startHole: 1,
+    draftHole: null,
+    activeRoundId: null,
     history: [],
     gameStatus: 'menu',
     settings: {
@@ -281,11 +324,16 @@ const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
         maxPushCountPerHalf: 2,
         language: 'ja',
         matchName: '',
+        courseName: '',
+        playedAt: '',
+        memo: '',
         playerCount: 4,
+        roundLength: 18,
         pushRecoveryOnBirdie: 1,
         pushRecoveryOnEagle: 2,
     },
     savedRounds: [],
+    playerProfiles: [],
     pendingCloudSaves: [],
     nextHoleMultiplier: 1,
     playerRanking: [],
@@ -314,6 +362,22 @@ export const useGameStore = create<GameStore>()(
                         },
                     ],
                 })),
+
+            rememberPlayerProfiles: (names) => set(state => ({
+                playerProfiles: updatePlayerProfiles(
+                    state.playerProfiles,
+                    names,
+                    useAuthStore.getState().user?.id ?? 'guest',
+                ),
+            })),
+
+            togglePlayerFavorite: (profileId) => set(state => ({
+                playerProfiles: state.playerProfiles
+                    .map(profile => profile.id === profileId
+                        ? { ...profile, isFavorite: !profile.isFavorite }
+                        : profile)
+                    .sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || b.useCount - a.useCount),
+            })),
 
             // ── 言語設定 ─────────────────────────────────────────────
             setLanguage: (lang) => {
@@ -378,28 +442,27 @@ export const useGameStore = create<GameStore>()(
                 // --- 4. 履歴からプッシュ使用回数とボーナスを再構築 ---
                 const rebuiltPushState = rebuildPushStateFromHistory(players, newHistory, settings);
 
-                // --- 5. 次ホールのランク付け ---
-                const realPlayerIds = rebuiltPushState.players
-                    .filter(p => p.type !== 'bogey_kun')
-                    .map(p => p.id);
-                const currentRanking = state.playerRanking.filter(id => realPlayerIds.includes(id));
-                const nextRanking = computeNextRanking(realPlayerIds, newHistory, currentRanking);
-
-                // 3人モード: bogey_kun を末尾に追加
-                const fullRanking = settings.playerCount === 3
-                    ? [...nextRanking, BOGEY_KUN_ID]
-                    : nextRanking;
-
-                // --- 6. ゲーム終了判定 ---
-                const isGameOver = holeNumber === 18;
-                const nextHole = isGameOver ? 18 : holeNumber + 1;
+                // --- 5. ゲーム終了判定 ---
+                const sequence = getRoundHoleSequence(state.startHole, settings.roundLength);
+                const completedHoleNumbers = new Set(newHistory.map(h => h.holeNumber));
+                const isGameOver = sequence.every(n => completedHoleNumbers.has(n));
+                const sequenceIndex = sequence.indexOf(holeNumber);
+                const nextHole = isGameOver
+                    ? holeNumber
+                    : sequence[Math.min(sequenceIndex + 1, sequence.length - 1)] ?? holeNumber;
                 const nextStatus: GameState['gameStatus'] = isGameOver ? 'finished' : 'playing';
+
+                // --- 6. 次ホールのランク付け（前ホールの打数順）。保存・表示用 ---
+                const realPlayerIds = players.filter(p => p.type !== 'bogey_kun').map(p => p.id);
+                const nextRanking = computeRankingForHole(realPlayerIds, sequence, newHistory, nextHole);
+                const fullRanking = settings.playerCount === 3 ? [...nextRanking, BOGEY_KUN_ID] : nextRanking;
 
                 set({
                     history: newHistory,
                     players: rebuiltPushState.players,
                     currentHole: nextHole,
                     gameStatus: nextStatus,
+                    draftHole: null,
                     nextHoleMultiplier: result.nextHoleMultiplier,
                     playerRanking: fullRanking,
                     pushUsed: rebuiltPushState.pushUsed,
@@ -411,14 +474,17 @@ export const useGameStore = create<GameStore>()(
 
             // ── ゲームリセット ───────────────────────────────────────
             resetGame: () => {
-                const { savedRounds, pendingCloudSaves } = get();
+                const { savedRounds, pendingCloudSaves, playerProfiles } = get();
                 // AsyncStorage からゲーム状態を削除（履歴は別キーで保持）
                 AsyncStorage.removeItem('golf-lasvegas-game').catch(() => {/* 無視 */});
                 set({
                     ...INITIAL_STATE,
                     savedRounds,
                     pendingCloudSaves,
+                    playerProfiles,
                     cloudRoundId: null,
+                    activeRoundId: null,
+                    draftHole: null,
                     players: DEFAULT_PLAYERS.map(p => ({
                         ...p,
                         pushUsageCount: { front9: 0, back9: 0 },
@@ -434,7 +500,7 @@ export const useGameStore = create<GameStore>()(
 
             // ── 推奨チームペア取得 ────────────────────────────────────
             getRecommendedPairs: (holeNumber) => {
-                const { players, playerRanking, settings } = get();
+                const { players, history, settings, startHole } = get();
 
                 // 実プレイヤーのみでランキング構築
                 const realPlayers = players.filter(p => p.type !== 'bogey_kun');
@@ -447,12 +513,8 @@ export const useGameStore = create<GameStore>()(
                     };
                 }
 
-                // playerRanking が設定済みなら使用、なければ players 順
-                const realPlayerIds = realPlayers.map(p => p.id);
-                const validRanking = playerRanking.filter(id => realPlayerIds.includes(id));
-                const baseRanking = validRanking.length === realPlayerIds.length
-                    ? validRanking
-                    : realPlayerIds;
+                const sequence = getRoundHoleSequence(startHole, settings.roundLength);
+                const baseRanking = computeRankingForHole(realPlayers.map(p => p.id), sequence, history, holeNumber);
 
                 // 3人モード: bogey_kun を末尾に追加してランキングを4人分に
                 const fullRanking: PlayerId[] = settings.playerCount === 3
@@ -485,11 +547,14 @@ export const useGameStore = create<GameStore>()(
 
             // ── ホールリセット ───────────────────────────────────────
             resetHole: (holeNumber) => {
-                const { history, players, settings } = get();
+                const { history, players, settings, startHole } = get();
                 const newHistory = history.filter(h => h.holeNumber !== holeNumber);
                 const rebuiltPushState = rebuildPushStateFromHistory(players, newHistory, settings);
 
-                const prevResult = newHistory.find(h => h.holeNumber === holeNumber - 1);
+                const sequence = getRoundHoleSequence(startHole, settings.roundLength);
+                const holeIndex = sequence.indexOf(holeNumber);
+                const previousHole = holeIndex > 0 ? sequence[holeIndex - 1] : null;
+                const prevResult = previousHole ? newHistory.find(h => h.holeNumber === previousHole) : undefined;
                 const restoredMultiplier = prevResult ? prevResult.nextHoleMultiplier : 1;
 
                 set({
@@ -505,15 +570,18 @@ export const useGameStore = create<GameStore>()(
 
             // ── ホール移動 ───────────────────────────────────────────
             goToHole: (holeNumber) => {
-                const { history } = get();
-                const prevResult = history.find(h => h.holeNumber === holeNumber - 1);
+                const { history, startHole, settings } = get();
+                const sequence = getRoundHoleSequence(startHole, settings.roundLength);
+                const holeIndex = sequence.indexOf(holeNumber);
+                const previousHole = holeIndex > 0 ? sequence[holeIndex - 1] : null;
+                const prevResult = previousHole ? history.find(h => h.holeNumber === previousHole) : undefined;
                 const restoredMultiplier = prevResult ? prevResult.nextHoleMultiplier : 1;
-                set({ currentHole: holeNumber, nextHoleMultiplier: restoredMultiplier });
+                set({ currentHole: holeNumber, nextHoleMultiplier: restoredMultiplier, draftHole: null });
             },
 
             // ── ゲーム開始 ───────────────────────────────────────────
             startGame: (startHole) => {
-                const { players: currentPlayers, settings: currentSettings, savedRounds, pendingCloudSaves } = get();
+                const { players: currentPlayers, settings: currentSettings, savedRounds, pendingCloudSaves, playerProfiles } = get();
 
                 // 実プレイヤーのみ（bogey_kun は startGame 時は含めない）
                 const realPlayerLimit = currentSettings.playerCount === 3 ? 3 : 4;
@@ -538,13 +606,21 @@ export const useGameStore = create<GameStore>()(
                     ...INITIAL_STATE,
                     savedRounds,
                     pendingCloudSaves,
+                    playerProfiles: updatePlayerProfiles(
+                        playerProfiles,
+                        realPlayers.map(player => player.name),
+                        useAuthStore.getState().user?.id ?? 'guest',
+                    ),
                     players: gamePlayers,
                     settings: {
                         ...INITIAL_STATE.settings,
                         ...currentSettings,
                     },
                     currentHole: startHole,
+                    startHole,
                     gameStatus: 'playing',
+                    draftHole: null,
+                    activeRoundId: null,
                     playerRanking: [],
                     pushUsed: initialPushUsed,
                     pushBonus: initialPushBonus,
@@ -560,53 +636,69 @@ export const useGameStore = create<GameStore>()(
                 }));
             },
 
+            saveDraft: (draft) => set({ draftHole: draft }),
+
             // ── ラウンド保存 ─────────────────────────────────────────
-            saveCurrentRound: async () => {
-                const { history, players, settings, savedRounds, getPlayerTotalScore, cloudRoundId } = get();
-                if (history.length === 0) return { localSaved: false, cloudStatus: 'no-data' };
+            saveCurrentRound: async (status = 'completed') => {
+                const {
+                    history, players, settings, savedRounds, getPlayerTotalScore,
+                    cloudRoundId, activeRoundId, currentHole, startHole, draftHole, playerRanking,
+                } = get();
 
                 const finalScores: Record<PlayerId, number> = {};
                 players.forEach(p => {
                     finalScores[p.id] = getPlayerTotalScore(p.id);
                 });
 
-                const existingRound = cloudRoundId
-                    ? savedRounds.find(r => r.cloudId === cloudRoundId || r.id === cloudRoundId)
-                    : null;
+                const existingRound = savedRounds.find(r =>
+                    r.id === activeRoundId ||
+                    (cloudRoundId !== null && (r.cloudId === cloudRoundId || r.id === cloudRoundId)),
+                );
                 const localRoundId = existingRound?.id ?? createLocalId('round');
+                const now = new Date().toISOString();
+                const authUser = useAuthStore.getState().user;
                 const newRound: RoundResult = {
                     id: localRoundId,
                     cloudId: cloudRoundId,
-                    date: existingRound?.date ?? new Date().toISOString(),
+                    date: existingRound?.date ?? now,
                     name: settings.matchName || 'Untitled Match',
                     players,
                     history,
                     finalScores,
-                    gameStatus: 'finished',
-                    currentHole: get().currentHole,
+                    gameStatus: status,
+                    currentHole,
+                    startHole,
+                    roundLength: settings.roundLength,
+                    settings: { ...settings },
+                    draftHole: status === 'paused' ? draftHole : null,
+                    updatedAt: now,
+                    ownerId: authUser?.id ?? 'guest',
+                    playerRanking,
                 };
 
                 const nextSavedRounds = existingRound
                     ? savedRounds.map(r => (r.id === existingRound.id ? newRound : r))
                     : [newRound, ...savedRounds];
 
-                set({ savedRounds: nextSavedRounds });
+                set({ savedRounds: nextSavedRounds, activeRoundId: localRoundId });
 
                 // ── クラウド保存（ログインユーザーのみ） ──────────────
-                const authUser = useAuthStore.getState().user;
                 if (!authUser) {
                     return { localSaved: true, cloudStatus: 'guest', roundId: localRoundId };
                 }
 
-                const roundData = buildRoundSaveData(players, settings, history, finalScores);
+                const roundData = buildRoundSaveData(
+                    players, settings, history, finalScores, status, currentHole, startHole,
+                    status === 'paused' ? draftHole : null,
+                    playerRanking,
+                );
 
                 try {
-                    const syncedCloudId = cloudRoundId
-                        ? (await cloudSave.updateRound(cloudRoundId, roundData), cloudRoundId)
-                        : await cloudSave.saveRound(authUser.id, roundData);
+                    const syncedCloudId = await cloudSave.upsertRound(authUser.id, cloudRoundId, roundData);
 
                     set((state) => ({
                         cloudRoundId: syncedCloudId,
+                        activeRoundId: syncedCloudId,
                         savedRounds: state.savedRounds.map(r => (
                             r.id === localRoundId ? { ...r, cloudId: syncedCloudId, id: syncedCloudId } : r
                         )),
@@ -639,6 +731,18 @@ export const useGameStore = create<GameStore>()(
                         message: err instanceof Error ? err.message : undefined,
                     };
                 }
+            },
+
+            pauseCurrentRound: async () => {
+                const result = await get().saveCurrentRound('paused');
+                set({ gameStatus: 'menu' });
+                return result;
+            },
+
+            finishCurrentRound: async () => {
+                const result = await get().saveCurrentRound('completed');
+                set({ gameStatus: 'menu', draftHole: null, activeRoundId: null, cloudRoundId: null });
+                return result;
             },
 
             // ── 保存済みラウンド削除 ────────────────────────────────
@@ -700,20 +804,63 @@ export const useGameStore = create<GameStore>()(
                         }
 
                         if (!item.roundData) continue;
-                        const syncedCloudId = item.cloudRoundId
-                            ? (await cloudSave.updateRound(item.cloudRoundId, item.roundData), item.cloudRoundId)
-                            : await cloudSave.saveRound(authUser.id, item.roundData);
+                        const syncedCloudId = await cloudSave.upsertRound(authUser.id, item.cloudRoundId, item.roundData);
 
-                        set((state) => ({
-                            savedRounds: state.savedRounds.map(r => (
-                                r.id === item.localRoundId ? { ...r, cloudId: syncedCloudId, id: syncedCloudId } : r
-                            )),
-                            pendingCloudSaves: state.pendingCloudSaves.filter(p => p.id !== item.id),
-                        }));
+                        set((state) => {
+                            // 進行中ラウンドの ID も追従させる（古い ID のままだと次回保存で重複作成される）
+                            const isActive = state.activeRoundId === item.localRoundId
+                                || (item.cloudRoundId != null && state.cloudRoundId === item.cloudRoundId);
+                            return {
+                                savedRounds: state.savedRounds.map(r => (
+                                    r.id === item.localRoundId ? { ...r, cloudId: syncedCloudId, id: syncedCloudId } : r
+                                )),
+                                pendingCloudSaves: state.pendingCloudSaves.filter(p => p.id !== item.id),
+                                ...(isActive ? { activeRoundId: syncedCloudId, cloudRoundId: syncedCloudId } : {}),
+                            };
+                        });
                     } catch {
-                        // Still offline or Supabase unavailable. Keep the item queued.
+                        // Still offline or the API is unavailable. Keep the item queued.
                     }
                 }
+            },
+
+            claimLegacyLocalData: (userId) => {
+                const { savedRounds, playerProfiles, pendingCloudSaves } = get();
+                const legacyRounds = savedRounds.filter(r => isLegacyOwner(r.ownerId, userId));
+                const legacyProfiles = playerProfiles.filter(p => isLegacyOwner(p.ownerId, userId));
+                const legacyPending = pendingCloudSaves.filter(p => isLegacyOwner(p.userId, userId));
+                if (legacyRounds.length === 0 && legacyProfiles.length === 0 && legacyPending.length === 0) return;
+
+                const claimedIds = new Set(legacyRounds.map(r => r.id));
+                const now = new Date().toISOString();
+                const uploads: PendingCloudSave[] = legacyRounds.map(round => ({
+                    id: createLocalId('pending'),
+                    operation: 'upsert',
+                    userId,
+                    localRoundId: round.id,
+                    cloudRoundId: null,
+                    roundData: buildRoundSaveData(
+                        round.players, round.settings, round.history, round.finalScores, round.gameStatus,
+                        round.currentHole, round.startHole, round.draftHole, round.playerRanking,
+                    ),
+                    createdAt: now,
+                }));
+
+                const ownedNames = new Set(playerProfiles
+                    .filter(p => p.ownerId === userId)
+                    .map(p => p.name.toLocaleLowerCase()));
+
+                set({
+                    // 旧クラウドはもう存在しないので cloudId は外す
+                    savedRounds: savedRounds.map(r => (claimedIds.has(r.id) ? { ...r, ownerId: userId, cloudId: null } : r)),
+                    playerProfiles: playerProfiles
+                        .filter(p => !isLegacyOwner(p.ownerId, userId) || !ownedNames.has(p.name.toLocaleLowerCase()))
+                        .map(p => (isLegacyOwner(p.ownerId, userId) ? { ...p, ownerId: userId } : p)),
+                    pendingCloudSaves: [
+                        ...uploads,
+                        ...pendingCloudSaves.filter(p => !isLegacyOwner(p.userId, userId) && !claimedIds.has(p.localRoundId)),
+                    ],
+                });
             },
 
             // ── クラウドラウンド読み込み ─────────────────────────────
@@ -732,12 +879,32 @@ export const useGameStore = create<GameStore>()(
                         players: Object.entries(r.player_names).map(([id, name]) => ({
                             id,
                             name,
+                            type: id === BOGEY_KUN_ID ? 'bogey_kun' as const : 'real' as const,
                             pushUsageCount: { front9: 0, back9: 0 },
                         })),
                         history: (r.holes as HoleResult[]) ?? [],
                         finalScores: r.total_points,
-                        gameStatus: 'finished' as const,
-                        currentHole: 18,
+                        gameStatus: r.status ?? 'completed',
+                        currentHole: r.current_hole ?? 18,
+                        startHole: r.start_hole ?? 1,
+                        roundLength: r.round_length ?? 18,
+                        settings: {
+                            ...INITIAL_STATE.settings,
+                            matchName: r.match_name,
+                            rate: r.rate,
+                            playerCount: r.player_count as 3 | 4,
+                            maxPushCountPerHalf: r.push_limit,
+                            pushRecoveryOnBirdie: r.push_recovery_on_birdie,
+                            pushRecoveryOnEagle: r.push_recovery_on_eagle,
+                            roundLength: r.round_length ?? 18,
+                            courseName: r.course_name ?? '',
+                            playedAt: r.played_at ?? '',
+                            memo: r.memo ?? '',
+                        },
+                        draftHole: (r.draft_hole as HoleDraft | null) ?? null,
+                        updatedAt: r.updated_at,
+                        ownerId: r.user_id,
+                        playerRanking: r.player_ranking ?? [],
                     }));
 
                     // ローカル履歴とマージ（IDで重複排除）
@@ -756,26 +923,65 @@ export const useGameStore = create<GameStore>()(
                 const round = savedRounds.find(r => r.id === roundId);
                 if (!round) return;
 
-                const sortedHistory = [...round.history].sort((a, b) => a.holeNumber - b.holeNumber);
-                const lastResult = sortedHistory[sortedHistory.length - 1];
-                const settings = {
+                const settings = round.settings ?? {
                     ...get().settings,
                     matchName: round.name,
+                    roundLength: round.roundLength ?? 18,
                 };
+                const sequence = getRoundHoleSequence(round.startHole ?? 1, settings.roundLength);
+                const currentIndex = sequence.indexOf(round.currentHole);
+                const previousHole = currentIndex > 0 ? sequence[currentIndex - 1] : null;
+                const previousResult = previousHole
+                    ? round.history.find(result => result.holeNumber === previousHole)
+                    : undefined;
                 const rebuiltPushState = rebuildPushStateFromHistory(round.players, round.history, settings);
 
                 set({
                     players: rebuiltPushState.players,
                     history: round.history,
                     currentHole: round.currentHole,
+                    startHole: round.startHole ?? 1,
                     gameStatus: 'playing',
-                    nextHoleMultiplier: lastResult?.nextHoleMultiplier ?? 1,
+                    nextHoleMultiplier: previousResult?.nextHoleMultiplier ?? 1,
                     settings,
-                    playerRanking: [],
+                    draftHole: round.draftHole ?? null,
+                    activeRoundId: round.id,
+                    cloudRoundId: round.cloudId ?? null,
+                    playerRanking: round.playerRanking ?? [],
                     pushUsed: rebuiltPushState.pushUsed,
                     pushBonus: rebuiltPushState.pushBonus,
                     pushUsedFront9: rebuiltPushState.pushUsedFront9,
                     pushBonusFront9: rebuiltPushState.pushBonusFront9,
+                });
+            },
+
+            duplicateRound: (roundId) => {
+                const { savedRounds, pendingCloudSaves, playerProfiles } = get();
+                const round = savedRounds.find(item => item.id === roundId);
+                if (!round) return;
+                const settings = {
+                    ...round.settings,
+                    matchName: round.name,
+                    playedAt: new Date().toISOString().slice(0, 10),
+                };
+                const players = round.players.map(player => ({
+                    ...player,
+                    pushUsageCount: { front9: 0, back9: 0 },
+                }));
+                set({
+                    ...INITIAL_STATE,
+                    savedRounds,
+                    pendingCloudSaves,
+                    playerProfiles: updatePlayerProfiles(
+                        playerProfiles,
+                        players.map(player => player.name),
+                        useAuthStore.getState().user?.id ?? 'guest',
+                    ),
+                    settings,
+                    players,
+                    startHole: round.startHole,
+                    currentHole: round.startHole,
+                    gameStatus: 'playing',
                 });
             },
         }),
@@ -787,8 +993,12 @@ export const useGameStore = create<GameStore>()(
                 currentHole: state.currentHole,
                 history: state.history,
                 gameStatus: state.gameStatus,
+                startHole: state.startHole,
+                draftHole: state.draftHole,
+                activeRoundId: state.activeRoundId,
                 settings: state.settings,
                 savedRounds: state.savedRounds,
+                playerProfiles: state.playerProfiles,
                 pendingCloudSaves: state.pendingCloudSaves,
                 nextHoleMultiplier: state.nextHoleMultiplier,
                 playerRanking: state.playerRanking,
@@ -811,10 +1021,30 @@ export const useGameStore = create<GameStore>()(
                     if (!state.pushUsedFront9) state.pushUsedFront9 = {};
                     if (!state.pushBonusFront9) state.pushBonusFront9 = {};
                     if (!state.pendingCloudSaves) state.pendingCloudSaves = [];
+                    if (!state.playerProfiles) state.playerProfiles = [];
+                    if (!state.startHole) state.startHole = 1;
+                    if (state.draftHole === undefined) state.draftHole = null;
+                    if (state.activeRoundId === undefined) state.activeRoundId = null;
                     if (state.cloudRoundId === undefined) state.cloudRoundId = null;
                     if (state.settings && !('playerCount' in state.settings)) {
                         (state.settings as GameState['settings']).playerCount = 4;
                     }
+                    if (state.settings && !('roundLength' in state.settings)) {
+                        (state.settings as GameState['settings']).roundLength = 18;
+                    }
+                    if (state.settings && !('courseName' in state.settings)) (state.settings as GameState['settings']).courseName = '';
+                    if (state.settings && !('playedAt' in state.settings)) (state.settings as GameState['settings']).playedAt = '';
+                    if (state.settings && !('memo' in state.settings)) (state.settings as GameState['settings']).memo = '';
+                    state.savedRounds = (state.savedRounds ?? []).map(round => ({
+                        ...round,
+                        gameStatus: round.gameStatus === 'paused' ? 'paused' : 'completed',
+                        startHole: round.startHole ?? 1,
+                        roundLength: round.roundLength ?? 18,
+                        settings: round.settings ?? { ...INITIAL_STATE.settings, matchName: round.name },
+                        draftHole: round.draftHole ?? null,
+                        updatedAt: round.updatedAt ?? round.date,
+                        playerRanking: round.playerRanking ?? [],
+                    }));
                     if (state.settings && !('pushRecoveryOnBirdie' in state.settings)) {
                         const legacySettings = state.settings as GameState['settings'] & { birdyPushRecovery?: boolean };
                         const legacyEnabled = legacySettings.birdyPushRecovery ?? false;

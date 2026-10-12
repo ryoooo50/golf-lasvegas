@@ -1,4 +1,6 @@
 export type PlayerId = string;
+export type RoundStatus = 'paused' | 'completed';
+export type RoundLength = 9 | 18;
 
 // ─── スコア判定型 ──────────────────────────────────────────────────
 // 'eagle' はイーグル以下（アルバトロス・ホールインワン含む）をすべて含む
@@ -16,6 +18,15 @@ export interface Player {
     front9: number; // OUT (1-9)
     back9: number;  // IN (10-18)
   };
+}
+
+export interface PlayerProfile {
+  id: string;
+  name: string;
+  isFavorite: boolean;
+  useCount: number;
+  lastUsedAt: string;
+  ownerId: string;
 }
 
 // ─── ゲーム設定 ────────────────────────────────────────────────────
@@ -73,6 +84,15 @@ export interface HoleResult {
   breakdown: CalculationBreakdown; // 詳細計算内訳
 }
 
+export interface HoleDraft {
+  holeNumber: number;
+  par: number | null;
+  scores: Record<PlayerId, number | undefined>;
+  birdieFlags: Record<PlayerId, boolean>;
+  pushCounts: Record<PlayerId, number>;
+  teamAssignments: Record<PlayerId, 'A' | 'B'>;
+}
+
 // ─── ホールデータ（新アーキテクチャ用） ───────────────────────────
 export interface HoleResultV2 {
   winningSide: 'A' | 'B' | 'draw';
@@ -107,8 +127,15 @@ export interface RoundResult {
   players: Player[];
   history: HoleResult[];
   finalScores: Record<PlayerId, number>;
-  gameStatus: 'menu' | 'playing' | 'finished';
+  gameStatus: RoundStatus;
   currentHole: number;
+  startHole: 1 | 10;
+  roundLength: RoundLength;
+  settings: GameState['settings'];
+  draftHole: HoleDraft | null;
+  updatedAt: string;
+  ownerId?: string;
+  playerRanking: PlayerId[];
 }
 
 export interface GameState {
@@ -116,6 +143,9 @@ export interface GameState {
   currentHole: number;
   history: HoleResult[];
   gameStatus: 'menu' | 'playing' | 'finished';
+  startHole: 1 | 10;
+  draftHole: HoleDraft | null;
+  activeRoundId: string | null;
 
   // 設定
   settings: {
@@ -123,13 +153,18 @@ export interface GameState {
     maxPushCountPerHalf: number; // デフォルト2（後方互換用、pushLimit と同義）
     language: 'en' | 'ja';
     matchName: string;
+    courseName: string;
+    playedAt: string;
+    memo: string;
     playerCount: 3 | 4;        // 3人 or 4人モード
+    roundLength: RoundLength;  // 9ホール or 18ホール
     pushRecoveryOnBirdie: number; // バーディーで復活するプッシュ権利数（0で無効、デフォルト1）
     pushRecoveryOnEagle: number;  // イーグル以下で復活するプッシュ権利数（0で無効、デフォルト2）
   };
 
   // Saved Rounds
   savedRounds: RoundResult[];
+  playerProfiles: PlayerProfile[];
   pendingCloudSaves: PendingCloudSave[];
 
   // 次のホールに持ち越されている倍率（初期値1, 引き分け発生で x2, x4...）
@@ -166,6 +201,15 @@ export interface PendingCloudSave {
     push_recovery_on_eagle: number;
     holes: unknown;
     total_points: Record<string, number>;
+    status: RoundStatus;
+    current_hole: number;
+    start_hole: 1 | 10;
+    round_length: RoundLength;
+    draft_hole: unknown;
+    player_ranking: PlayerId[];
+    course_name: string;
+    played_at: string;
+    memo: string;
   };
   createdAt: string;
 }

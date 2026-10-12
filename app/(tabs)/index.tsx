@@ -10,6 +10,7 @@ export default function HomeScreen() {
   const { user, isGuest, isLoading, initialize } = useAuthStore();
   const gameStatus = useGameStore((state) => state.gameStatus);
   const loadCloudRounds = useGameStore((state) => state.loadCloudRounds);
+  const claimLegacyLocalData = useGameStore((state) => state.claimLegacyLocalData);
 
   // React.StrictMode 対策: 一度だけ initialize() を呼ぶ
   const initialized = useRef(false);
@@ -21,8 +22,9 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!user || isGuest) return;
+    claimLegacyLocalData(user.id);
     loadCloudRounds();
-  }, [user, isGuest, loadCloudRounds]);
+  }, [user, isGuest, claimLegacyLocalData, loadCloudRounds]);
 
   if (isLoading) {
     return (

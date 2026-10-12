@@ -18,7 +18,7 @@ const FEATURE_PILLS: { icon: keyof typeof Ionicons.glyphMap; label: string }[] =
 
 export const AuthScreen = () => {
     const { t } = useTranslation();
-    const { signIn, signUp, playAsGuest, isLoading, error } = useAuthStore();
+    const { signIn, signUp, playAsGuest, isLoading, error, notice } = useAuthStore();
 
     const [mode, setMode] = useState<AuthMode>('login');
     const [email, setEmail] = useState('');
@@ -114,6 +114,9 @@ export const AuthScreen = () => {
                         {error !== null && (
                             <Text style={styles.errorText}>{error}</Text>
                         )}
+                        {notice !== null && (
+                            <Text style={styles.noticeText}>{notice}</Text>
+                        )}
 
                         <Button
                             mode="contained"
@@ -180,6 +183,7 @@ const styles = StyleSheet.create({
     card: { backgroundColor: C.surface, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 20, gap: 4 },
     input: { marginBottom: 12, backgroundColor: C.surface },
     errorText: { color: C.coralPrimary, fontSize: 13, marginBottom: 8, textAlign: 'center' },
+    noticeText: { color: C.ink2, fontSize: 13, marginBottom: 8, textAlign: 'center' },
     submitButton: { marginTop: 8, borderRadius: 8 },
     submitContent: { height: 50 },
     submitLabel: { fontSize: 16, fontWeight: 'bold' },

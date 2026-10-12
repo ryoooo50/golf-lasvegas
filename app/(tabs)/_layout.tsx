@@ -8,6 +8,7 @@ export default function TabLayout() {
       <Stack.Screen name="scorecard" options={{ presentation: 'card', animation: 'slide_from_right' }} />
       <Stack.Screen name="history" options={{ presentation: 'card', animation: 'slide_from_right' }} />
       <Stack.Screen name="settings" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+      <Stack.Screen name="round-detail" options={{ presentation: 'card', animation: 'slide_from_right' }} />
     </Stack>
   );
 }

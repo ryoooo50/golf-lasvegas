@@ -25,10 +25,13 @@ function Stepper({ label, value, onChange, min = 0, max = 5 }: { label: string; 
 export const SettingsScreen = () => {
     const router = useRouter();
     const { t } = useTranslation();
-    const { settings, updateSettings, setLanguage, resetGame } = useGameStore();
-    const { signOut, user } = useAuthStore();
+    const { settings, updateSettings, setLanguage, resetGame, pauseCurrentRound, finishCurrentRound } = useGameStore();
+    const { signOut, user, isGuest } = useAuthStore();
 
     const [editRate, setEditRate] = useState(settings.rate.toString());
+    const [courseName, setCourseName] = useState(settings.courseName);
+    const [playedAt, setPlayedAt] = useState(settings.playedAt);
+    const [memo, setMemo] = useState(settings.memo);
     const [pushLimit, setPushLimit] = useState(settings.maxPushCountPerHalf);
     const [pushRecoveryOnBirdie, setPushRecoveryOnBirdie] = useState(settings.pushRecoveryOnBirdie);
     const [pushRecoveryOnEagle, setPushRecoveryOnEagle] = useState(settings.pushRecoveryOnEagle);
@@ -36,6 +39,9 @@ export const SettingsScreen = () => {
     const handleSave = () => {
         updateSettings({
             rate: parseInt(editRate, 10) || settings.rate,
+            courseName,
+            playedAt,
+            memo,
             maxPushCountPerHalf: pushLimit,
             pushRecoveryOnBirdie,
             pushRecoveryOnEagle,
@@ -58,11 +64,69 @@ export const SettingsScreen = () => {
         }
     };
 
+    const handleFinish = () => {
+        const execute = async () => {
+            await finishCurrentRound();
+            router.replace('/');
+        };
+        if (Platform.OS === 'web') {
+            if (window.confirm(t('common.confirmFinishNow'))) void execute();
+        } else {
+            Alert.alert(t('common.finishGame'), t('common.confirmFinishNow'), [
+                { text: t('common.cancel'), style: 'cancel' },
+                { text: t('common.finish'), onPress: () => { void execute(); } },
+            ]);
+        }
+    };
+
+    const handleExitSession = () => {
+        const execute = async () => {
+            await pauseCurrentRound();
+            await signOut();
+            resetGame();
+            router.replace('/');
+        };
+        const message = user ? t('auth.confirmLogoutWithRound') : t('auth.confirmExitGuestWithRound');
+        if (Platform.OS === 'web') {
+            if (window.confirm(message)) void execute();
+        } else {
+            Alert.alert(user ? t('auth.logoutButton') : t('auth.exitGuestButton'), message, [
+                { text: t('common.cancel'), style: 'cancel' },
+                { text: t('common.ok'), onPress: () => { void execute(); } },
+            ]);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.root} edges={['bottom', 'left', 'right']}>
             <ScreenHeader title={t('common.settings')} onBack={() => router.back()} />
             <ScrollView contentContainerStyle={styles.body}>
                 <Text style={styles.matchName}>{settings.matchName}</Text>
+
+                <TextInput
+                    label={t('setup.courseNameLabel')}
+                    value={courseName}
+                    onChangeText={setCourseName}
+                    mode="outlined"
+                    style={styles.input}
+                />
+
+                <TextInput
+                    label={t('setup.playedAtLabel')}
+                    value={playedAt}
+                    onChangeText={setPlayedAt}
+                    mode="outlined"
+                    style={styles.input}
+                />
+
+                <TextInput
+                    label={t('setup.memoLabel')}
+                    value={memo}
+                    onChangeText={setMemo}
+                    multiline
+                    mode="outlined"
+                    style={styles.input}
+                />
 
                 <TextInput
                     label={t('common.rate')}
@@ -93,9 +157,13 @@ export const SettingsScreen = () => {
                     {t('common.restart')}
                 </Button>
 
-                {user && (
-                    <Button mode="outlined" icon="logout" style={styles.secondaryBtn} onPress={() => signOut()}>
-                        {t('auth.logoutButton')}
+                <Button mode="outlined" style={styles.secondaryBtn} onPress={handleFinish} textColor={C.coralDeep}>
+                    {t('common.finishGame')}
+                </Button>
+
+                {(user || isGuest) && (
+                    <Button mode="outlined" icon="logout" style={styles.secondaryBtn} onPress={handleExitSession}>
+                        {user ? t('auth.logoutButton') : t('auth.exitGuestButton')}
                     </Button>
                 )}
             </ScrollView>

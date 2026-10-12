@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Dialog, Portal, Text, TextInput } from 'react-native-paper';
 import { HoleHeader } from '../components/score-input/HoleHeader';
 import { LivePreviewPanel } from '../components/score-input/LivePreviewPanel';
@@ -10,9 +10,11 @@ import { ParSelectDialog } from '../components/score-input/ParSelectDialog';
 import { PlayerScoreCard } from '../components/score-input/PlayerScoreCard';
 import { ResultSummaryDialog } from '../components/score-input/ResultSummaryDialog';
 import { BottomTabBar } from '../components/shared/BottomTabBar';
+import { SyncStatusBanner } from '../components/shared/SyncStatusBanner';
 import { C } from '../theme/colors';
-import { useGameStore } from '../store/gameStore';
-import { CalculationBreakdown, PlayerId, ScoreInput } from '../types';
+import { getRoundHoleSequence, useGameStore } from '../store/gameStore';
+import { HoleResult, PlayerId, SaveRoundResult, ScoreInput } from '../types';
+import { confirmAction, notify } from '../utils/dialogs';
 import { calculateLivePreview } from '../utils/golfLogic';
 
 export const ScoreInputScreen = () => {
@@ -20,7 +22,8 @@ export const ScoreInputScreen = () => {
     const {
         players, currentHole, nextHoleMultiplier, completeHole, settings,
         getRecommendedPairs, getPlayerTotalScore, updatePlayerName,
-        getRemainingPushForPlayer, goToHole, resetHole, history, saveCurrentRound,
+        getRemainingPushForPlayer, goToHole, resetHole, history,
+        saveDraft, pauseCurrentRound, startHole,
     } = useGameStore();
     const { t } = useTranslation();
     const bgScrollRef = useRef<ScrollView>(null);
@@ -36,7 +39,9 @@ export const ScoreInputScreen = () => {
     const [editingPlayerId, setEditingPlayerId] = useState<PlayerId | null>(null);
     const [editingName, setEditingName] = useState('');
     const [isHelpVisible, setIsHelpVisible] = useState(false);
-    const [resultBreakdown, setResultBreakdown] = useState<CalculationBreakdown | null>(null);
+    // 確定したホールの結果。確定直後に currentHole が次ホールへ進み teamAssignments も
+    // 次ホールの推奨ペアに置き換わるため、表示用のチーム情報も確定時点のものを保持する。
+    const [lastHoleResult, setLastHoleResult] = useState<HoleResult | null>(null);
     const [isResultVisible, setIsResultVisible] = useState(false);
 
     const [pendingTeamChange, setPendingTeamChange] = useState<{ id: PlayerId; newTeam: 'A' | 'B' } | null>(null);
@@ -65,6 +70,15 @@ export const ScoreInputScreen = () => {
             setPushCounts(savedPush);
             setTeamAssignments(savedAssignments);
         } else {
+            const persistedDraft = useGameStore.getState().draftHole;
+            if (persistedDraft?.holeNumber === currentHole) {
+                setPar(persistedDraft.par);
+                setScores(persistedDraft.scores);
+                setBirdieFlags(persistedDraft.birdieFlags);
+                setPushCounts(persistedDraft.pushCounts);
+                setTeamAssignments(persistedDraft.teamAssignments);
+                return;
+            }
             setPar(null);
             setScores({});
             setBirdieFlags({});
@@ -93,6 +107,18 @@ export const ScoreInputScreen = () => {
     }, [currentHole, history, getRecommendedPairs]);
 
     useEffect(() => {
+        if (Object.keys(teamAssignments).length === 0) return;
+        saveDraft({
+            holeNumber: currentHole,
+            par,
+            scores,
+            birdieFlags,
+            pushCounts,
+            teamAssignments,
+        });
+    }, [currentHole, par, scores, birdieFlags, pushCounts, teamAssignments, saveDraft]);
+
+    useEffect(() => {
         if (par === null) setIsParDialogVisible(true);
     }, [currentHole, par]);
 
@@ -103,6 +129,19 @@ export const ScoreInputScreen = () => {
     const isScoresEntered = players.every(p => scores[p.id] !== undefined && (scores[p.id] ?? 0) > 0);
     const canSubmit = isValidTeams && isScoresEntered && par !== null;
     const isEditingExisting = history.some(h => h.holeNumber === currentHole);
+    const hasCurrentInput = par !== null || Object.keys(scores).length > 0 || Object.keys(pushCounts).length > 0;
+    const holeSequence = useMemo(
+        () => getRoundHoleSequence(startHole, settings.roundLength),
+        [startHole, settings.roundLength],
+    );
+    const currentSequenceIndex = holeSequence.indexOf(currentHole);
+    const previousHole = currentSequenceIndex > 0 ? holeSequence[currentSequenceIndex - 1] : null;
+    const nextHole = currentSequenceIndex >= 0 && currentSequenceIndex < holeSequence.length - 1
+        ? holeSequence[currentSequenceIndex + 1]
+        : null;
+    const willCompleteRound = holeSequence.every(hole =>
+        hole === currentHole || history.some(result => result.holeNumber === hole),
+    );
 
     const livePreview = useMemo(() => {
         const currentCOLevel = nextHoleMultiplier === 1 ? 0 : nextHoleMultiplier / 2;
@@ -172,15 +211,18 @@ export const ScoreInputScreen = () => {
         return null;
     };
 
-    const alertSaveResult = (result: Awaited<ReturnType<typeof saveCurrentRound>>) => {
-        const goToHistory = () => router.push('/history');
-        if (result.cloudStatus === 'saved') {
-            Alert.alert(t('common.roundSaved'), t('auth.cloudSaved'), [{ text: t('common.ok'), onPress: goToHistory }]);
-        } else if (result.cloudStatus === 'queued') {
-            Alert.alert(t('common.roundSaved'), t('auth.cloudQueued'), [{ text: t('common.ok'), onPress: goToHistory }]);
-        } else {
-            Alert.alert(t('common.roundSaved'), '', [{ text: t('common.ok'), onPress: goToHistory }]);
-        }
+    const cloudStatusMessage = (result: SaveRoundResult): string => {
+        if (result.cloudStatus === 'saved') return t('auth.cloudSaved');
+        if (result.cloudStatus === 'queued') return t('auth.cloudQueued');
+        return '';
+    };
+
+    const notifyRoundFinished = (result: SaveRoundResult) => {
+        const goToResult = () => {
+            if (result.roundId) router.push({ pathname: './round-detail', params: { id: result.roundId } });
+            else router.push('/history');
+        };
+        notify(t('common.roundSaved'), cloudStatusMessage(result), t('common.ok'), goToResult);
     };
 
     const handleSubmit = () => {
@@ -201,7 +243,7 @@ export const ScoreInputScreen = () => {
 
         const warning = getInputWarning(scoreInputs);
 
-        const doComplete = async (saveAfterComplete = false) => {
+        const doComplete = async (finishRound: boolean) => {
             completeHole({
                 par,
                 scores: scoreInputs,
@@ -209,50 +251,52 @@ export const ScoreInputScreen = () => {
                 teamB_Ids: [teamB[0].id, teamB[1].id],
                 holeNumber: currentHole,
             });
-            const savedResult = useGameStore.getState().history.find(h => h.holeNumber === currentHole);
-            if (savedResult?.breakdown) {
-                setResultBreakdown(savedResult.breakdown);
-                setIsResultVisible(true);
+
+            if (finishRound) {
+                // 保存してラウンドを閉じ（gameStatus → menu）、結果画面へ移動する
+                const result = await useGameStore.getState().finishCurrentRound();
+                notifyRoundFinished(result);
+                return;
             }
 
-            if (saveAfterComplete) {
-                const result = await useGameStore.getState().saveCurrentRound();
-                alertSaveResult(result);
+            const savedResult = useGameStore.getState().history.find(h => h.holeNumber === currentHole);
+            if (savedResult) {
+                setLastHoleResult(savedResult);
+                setIsResultVisible(true);
             }
         };
 
         const proceed = () => {
-            if (currentHole === 18) {
-                Alert.alert(
-                    t('common.finishGame'),
-                    t('common.confirmFinishAndSave'),
-                    [
-                        { text: t('common.cancel'), style: 'cancel' },
-                        { text: t('common.ok'), onPress: () => { void doComplete(true); } },
-                    ],
-                );
+            if (willCompleteRound) {
+                confirmAction({
+                    title: t('common.finishGame'),
+                    message: t('common.confirmFinishAndSave'),
+                    okText: t('common.finish'),
+                    cancelText: t('common.cancel'),
+                    onConfirm: () => { void doComplete(true); },
+                });
             } else {
                 void doComplete(false);
             }
         };
 
         if (warning) {
-            Alert.alert(
-                t('common.warning'),
-                warning,
-                [
-                    { text: t('common.cancel'), style: 'cancel' },
-                    { text: t('common.ok'), onPress: proceed },
-                ],
-            );
+            confirmAction({
+                title: t('common.warning'),
+                message: warning,
+                okText: t('common.ok'),
+                cancelText: t('common.cancel'),
+                onConfirm: proceed,
+            });
         } else {
             proceed();
         }
     };
 
     const handleSaveGame = async () => {
-        const result = await saveCurrentRound();
-        alertSaveResult(result);
+        saveDraft({ holeNumber: currentHole, par, scores, birdieFlags, pushCounts, teamAssignments });
+        const result = await pauseCurrentRound();
+        notify(t('common.roundPaused'), cloudStatusMessage(result), t('common.ok'), () => router.replace('/'));
     };
 
     const handleTabChange = (tab: 'hole' | 'scorecard' | 'history' | 'settings') => {
@@ -262,20 +306,20 @@ export const ScoreInputScreen = () => {
     };
 
     const handleResetHole = () => {
+        const confirmationLabel = isEditingExisting ? t('common.resetHole') : t('common.clearCurrentInput');
         const doReset = () => {
             resetHole(currentHole);
             setScores({});
             setBirdieFlags({});
             setPushCounts({});
         };
-        if (Platform.OS === 'web') {
-            if (window.confirm(t('common.resetHole') + '?')) doReset();
-        } else {
-            Alert.alert(t('common.resetHole'), '', [
-                { text: t('common.cancel'), style: 'cancel' },
-                { text: t('common.ok'), style: 'destructive', onPress: doReset },
-            ]);
-        }
+        confirmAction({
+            title: `${confirmationLabel}?`,
+            okText: t('common.ok'),
+            cancelText: t('common.cancel'),
+            destructive: true,
+            onConfirm: doReset,
+        });
     };
 
     const openNameEditor = (id: PlayerId, name: string) => {
@@ -298,11 +342,12 @@ export const ScoreInputScreen = () => {
                 par={par}
                 liveMultiplier={liveMultiplier}
                 isFront9={isFront9}
-                canGoPrev={currentHole > 1}
-                canGoNext={isEditingExisting}
+                canGoPrev={previousHole !== null}
+                canGoNext={nextHole !== null && isEditingExisting}
                 history={history}
-                onPrevHole={() => goToHole(currentHole - 1)}
-                onNextHole={() => goToHole(currentHole + 1)}
+                holeNumbers={holeSequence}
+                onPrevHole={() => { if (previousHole !== null) goToHole(previousHole); }}
+                onNextHole={() => { if (nextHole !== null) goToHole(nextHole); }}
                 onParPress={() => setIsParDialogVisible(true)}
                 onHelpPress={() => setIsHelpVisible(true)}
                 onHalfToggle={(half) => {
@@ -315,6 +360,7 @@ export const ScoreInputScreen = () => {
                     }
                 }}
             />
+            <SyncStatusBanner />
 
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <View style={styles.container}>
@@ -389,9 +435,11 @@ export const ScoreInputScreen = () => {
                     </ScrollView>
 
                     <View style={styles.bottomContainer}>
-                        {isEditingExisting && (
+                        {(isEditingExisting || hasCurrentInput) && (
                             <TouchableOpacity onPress={handleResetHole} style={styles.resetBtn}>
-                                <Text style={styles.resetBtnText}>{t('common.resetHole')}</Text>
+                                <Text style={styles.resetBtnText}>
+                                    {isEditingExisting ? t('common.resetHole') : t('common.clearCurrentInput')}
+                                </Text>
                             </TouchableOpacity>
                         )}
                         <View style={styles.bottomRow}>
@@ -407,10 +455,10 @@ export const ScoreInputScreen = () => {
                                 style={[styles.nextBtn, !canSubmit && styles.nextBtnDisabled]}
                             >
                                 <Text style={styles.nextBtnText}>
-                                    {isEditingExisting
+                                    {willCompleteRound
+                                        ? (isEditingExisting ? t('common.updateAndFinish') : t('common.finishRound'))
+                                        : isEditingExisting
                                         ? t('common.updateHole')
-                                        : currentHole === 18
-                                        ? t('common.finish')
                                         : `${t('common.nextHole')} →`}
                                 </Text>
                             </TouchableOpacity>
@@ -429,9 +477,8 @@ export const ScoreInputScreen = () => {
             <ResultSummaryDialog
                 visible={isResultVisible}
                 onDismiss={() => setIsResultVisible(false)}
-                breakdown={resultBreakdown}
-                teamAPlayers={teamA}
-                teamBPlayers={teamB}
+                result={lastHoleResult}
+                players={players}
                 rate={settings.rate}
             />
 

@@ -4,7 +4,11 @@
     "outputDirectory": "dist",
     "rewrites": [
         {
-            "source": "/(.*)",
+            "source": "/api/auth/(.*)",
+            "destination": "/api/auth?__path=$1"
+        },
+        {
+            "source": "/((?!api/).*)",
             "destination": "/index.html"
         }
     ],

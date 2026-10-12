@@ -25,6 +25,22 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Backend (Neon + Better Auth on Vercel Functions)
+
+- `api/` … Vercel Functions の入口（`/api/auth/*` 認証、`/api/rounds` ラウンド保存）
+- `server/` … 認証設定・DB 接続・rounds の処理
+- `neon/schema.sql` … DB スキーマ。`DATABASE_URL=... npm run db:migrate` で適用（何度流しても安全）
+
+必要な環境変数は `.env.example` を参照。
+
+```bash
+# API の結合テスト（ローカルの Postgres に対して実行）
+docker run -d --name golf-lv-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=golf -p 54329:5432 postgres:17-alpine
+export DATABASE_URL=postgres://postgres:postgres@localhost:54329/golf
+npm run db:migrate
+BETTER_AUTH_SECRET=$(openssl rand -hex 32) BETTER_AUTH_URL=http://localhost:3000 npm run test:api
+```
+
 ## Get a fresh project
 
 When you're ready, run:
