@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet } from 'react-native';
-import { Button, Dialog, Portal, SegmentedButtons, Text } from 'react-native-paper';
+import { Button, Dialog, Portal, RadioButton, Text } from 'react-native-paper';
 import { C } from '../../theme/colors';
 import { HandicapFloor, PlayerHandicap } from '../../types';
 
@@ -33,26 +33,19 @@ export const HandicapDialog: React.FC<HandicapDialogProps> = ({ visible, playerN
             <Dialog visible={visible} onDismiss={onDismiss}>
                 <Dialog.Title>{t('setup.handicapTitle', { name: playerName })}</Dialog.Title>
                 <Dialog.Content style={styles.content}>
+                    {/* 横並びだと小さい画面で Every One が見切れるため、縦に並べる */}
                     <Text style={styles.label}>{t('setup.handicapStrokes')}</Text>
-                    <SegmentedButtons
-                        value={String(strokes)}
-                        onValueChange={v => setStrokes(Number(v))}
-                        buttons={[
-                            { value: '0', label: t('setup.handicapNone') },
-                            { value: '1', label: t('setup.handicapEveryOne') },
-                            { value: '2', label: t('setup.handicapEveryTwo') },
-                        ]}
-                    />
+                    <RadioButton.Group value={String(strokes)} onValueChange={v => setStrokes(Number(v))}>
+                        <RadioButton.Item label={t('setup.handicapNone')} value="0" style={styles.option} />
+                        <RadioButton.Item label={t('setup.handicapEveryOne')} value="1" style={styles.option} />
+                        <RadioButton.Item label={t('setup.handicapEveryTwo')} value="2" style={styles.option} />
+                    </RadioButton.Group>
                     <Text style={[styles.label, strokes === 0 && styles.disabled]}>{t('setup.handicapFloor')}</Text>
-                    <SegmentedButtons
-                        value={floor}
-                        onValueChange={v => setFloor(v as HandicapFloor)}
-                        buttons={[
-                            { value: 'none', label: t('setup.handicapFloorNone'), disabled: strokes === 0 },
-                            { value: 'par', label: t('setup.handicapFloorPar'), disabled: strokes === 0 },
-                            { value: 'bogey', label: t('setup.handicapFloorBogey'), disabled: strokes === 0 },
-                        ]}
-                    />
+                    <RadioButton.Group value={floor} onValueChange={v => setFloor(v as HandicapFloor)}>
+                        <RadioButton.Item label={t('setup.handicapFloorNone')} value="none" disabled={strokes === 0} style={styles.option} />
+                        <RadioButton.Item label={t('setup.handicapFloorPar')} value="par" disabled={strokes === 0} style={styles.option} />
+                        <RadioButton.Item label={t('setup.handicapFloorBogey')} value="bogey" disabled={strokes === 0} style={styles.option} />
+                    </RadioButton.Group>
                     <Text style={styles.help}>{t('setup.handicapHelp')}</Text>
                 </Dialog.Content>
                 <Dialog.Actions>
@@ -65,8 +58,9 @@ export const HandicapDialog: React.FC<HandicapDialogProps> = ({ visible, playerN
 };
 
 const styles = StyleSheet.create({
-    content: { gap: 8 },
+    content: { gap: 0 },
     label: { color: C.ink3, fontSize: 13, fontWeight: '600', marginTop: 4 },
     disabled: { color: C.ink5 },
     help: { color: C.ink4, fontSize: 12, marginTop: 4 },
+    option: { paddingVertical: 2, paddingHorizontal: 0 },
 });

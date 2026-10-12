@@ -11,8 +11,8 @@ export type ScoreCategory = 'normal' | 'birdie' | 'eagle';
 export type PlayerType = 'real' | 'bogey_kun';
 
 // ─── ハンデ ────────────────────────────────────────────────────────
-// strokes: 毎ホール引く打数（1=エブリワン, 2=エブリツー）
-// floor: 縛り。ハンデを引いてもこのスコアより良くはならない（'par'=パー, 'bogey'=ボギー）
+// strokes: ハンデ方式。毎ホール引く打数（1=Every One, 2=Every Two）
+// floor: 上限。ハンデを引いてもこのスコアより良くはならない（'par'=パー, 'bogey'=ボギー）
 export type HandicapFloor = 'none' | 'par' | 'bogey';
 
 export interface PlayerHandicap {

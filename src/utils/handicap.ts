@@ -11,8 +11,8 @@ export function hasHandicap(handicap: PlayerHandicap | undefined): handicap is P
 
 /**
  * ハンデ適用後のスコアを返す。
- * 縛りがある場合、ハンデを引いても縛りのスコア（パー or ボギー）より良くはならない。
- * もともと縛りより良いスコアならそのまま（例: パー縛りで実バーディーは引かない）。
+ * 上限がある場合、ハンデを引いても上限のスコア（パー or ボギー）より良くはならない。
+ * もともと上限より良いスコアならそのまま（例: 上限パーで実バーディーは引かない）。
  */
 export function applyHandicap(gross: number, par: number, handicap: PlayerHandicap | undefined): number {
     if (!hasHandicap(handicap)) return gross;
@@ -43,17 +43,19 @@ export function grossScoreOf(input: ScoreInput | undefined): number | undefined 
     return input?.grossScore ?? input?.score;
 }
 
+const strokesLabel = (n: number) => (n === 1 ? 'Every One' : n === 2 ? 'Every Two' : `Every ${n}`);
+
 const LABELS = {
     ja: {
         none: 'なし',
-        strokes: (n: number) => (n === 1 ? 'エブリワン' : n === 2 ? 'エブリツー' : `毎ホール-${n}`),
-        floor: { par: 'パー縛り', bogey: 'ボギー縛り' },
+        strokes: strokesLabel,
+        floor: { par: '上限パー', bogey: '上限ボギー' },
         join: (s: string, f: string) => `${s}・${f}`,
     },
     en: {
         none: 'None',
-        strokes: (n: number) => `Every ${n}`,
-        floor: { par: 'par floor', bogey: 'bogey floor' },
+        strokes: strokesLabel,
+        floor: { par: 'capped at par', bogey: 'capped at bogey' },
         join: (s: string, f: string) => `${s} (${f})`,
     },
 };

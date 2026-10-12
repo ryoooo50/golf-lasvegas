@@ -69,14 +69,14 @@ describe('buildScoreInput', () => {
 
 describe('formatHandicap', () => {
     it('describes the handicap in Japanese', () => {
-        expect(formatHandicap(everyOne, 'ja')).toBe('エブリワン');
-        expect(formatHandicap(everyTwoPar, 'ja')).toBe('エブリツー・パー縛り');
-        expect(formatHandicap(everyOneBogey, 'ja')).toBe('エブリワン・ボギー縛り');
+        expect(formatHandicap(everyOne, 'ja')).toBe('Every One');
+        expect(formatHandicap(everyTwoPar, 'ja')).toBe('Every Two・上限パー');
+        expect(formatHandicap(everyOneBogey, 'ja')).toBe('Every One・上限ボギー');
         expect(formatHandicap(undefined, 'ja')).toBe('なし');
     });
 
     it('describes the handicap in English', () => {
-        expect(formatHandicap(everyOnePar, 'en')).toBe('Every 1 (par floor)');
+        expect(formatHandicap(everyOnePar, 'en')).toBe('Every One (capped at par)');
         expect(formatHandicap(undefined, 'en')).toBe('None');
     });
 });
