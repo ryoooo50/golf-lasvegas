@@ -7,8 +7,9 @@ import { useAuthStore } from './authStore';
 import { GameState, HoleDraft, HoleResult, PendingCloudSave, Player, PlayerHandicap, PlayerId, PlayerProfile, RoundResult, RoundStatus, SaveRoundResult, ScoreInput } from '../types';
 import { calculateHoleResult } from '../utils/golfLogic';
 import { hasHandicap } from '../utils/handicap';
+import { recalculateHistory } from '../utils/recalculateHistory';
 import { computeRankingForHole } from '../utils/teamRanking';
-import { BOGEY_KUN_ID, applySoloPlayerPointMultiplier, computeTeamPairs, findSoloPlayer } from '../utils/threePlayerMode';
+import { BOGEY_KUN_ID, computeTeamPairs, findSoloPlayer } from '../utils/threePlayerMode';
 
 // ─── ボギーくんプレイヤー定義 ────────────────────────────────────────
 const BOGEY_KUN_PLAYER: Player = {
@@ -401,7 +402,7 @@ export const useGameStore = create<GameStore>()(
             // ── ホール確定 ───────────────────────────────────────────
             completeHole: ({ par, scores, teamA_Ids, teamB_Ids, holeNumber }) => {
                 const state = get();
-                const { players, history, settings, nextHoleMultiplier } = state;
+                const { players, history, settings } = state;
 
                 // 3人モード: ボギーくんのスコアを par+1 で自動設定
                 const effectiveScores = { ...scores };
@@ -414,47 +415,28 @@ export const useGameStore = create<GameStore>()(
                     };
                 }
 
-                // --- 1. ホール計算 ---
-                const currentCarryOverLevel = nextHoleMultiplier === 1
-                    ? 0
-                    : nextHoleMultiplier / 2;
-
-                const result = calculateHoleResult({
+                // --- 1. 入力を履歴に反映し、このホール以降をプレー順に計算し直す ---
+                // （過去ホールの修正でキャリーオーバーが変わると後続ホールの倍率・ポイントも変わる）
+                const sequence = getRoundHoleSequence(state.startHole, settings.roundLength);
+                const entered = calculateHoleResult({
                     holeNumber,
                     par,
                     scores: effectiveScores,
                     teamA_Ids,
                     teamB_Ids,
-                    currentCarryOverLevel,
+                    currentCarryOverLevel: 0, // 倍率は recalculateHistory で前ホールから求め直す
                 });
+                const newHistory = recalculateHistory(
+                    [...history.filter(h => h.holeNumber !== holeNumber), entered],
+                    sequence,
+                    settings.playerCount,
+                );
+                const result = newHistory.find(h => h.holeNumber === holeNumber) ?? entered;
 
-                // --- 2. 3人モード: ソロプレイヤーのポイントを×2 ---
-                let adjustedPointsResult = { ...result.pointsResult };
-                if (settings.playerCount === 3) {
-                    adjustedPointsResult = applySoloPlayerPointMultiplier(adjustedPointsResult, teamA_Ids, teamB_Ids);
-                }
-
-                // 調整済みポイントで HoleResult を上書き
-                const adjustedResult: HoleResult = {
-                    ...result,
-                    pointsResult: adjustedPointsResult,
-                };
-
-                // --- 3. 履歴を更新 ---
-                const existingIndex = history.findIndex(h => h.holeNumber === holeNumber);
-                const newHistory = [...history];
-                if (existingIndex !== -1) {
-                    newHistory[existingIndex] = adjustedResult;
-                } else {
-                    newHistory.push(adjustedResult);
-                    newHistory.sort((a, b) => a.holeNumber - b.holeNumber);
-                }
-
-                // --- 4. 履歴からプッシュ使用回数とボーナスを再構築 ---
+                // --- 2. 履歴からプッシュ使用回数とボーナスを再構築 ---
                 const rebuiltPushState = rebuildPushStateFromHistory(players, newHistory, settings);
 
-                // --- 5. ゲーム終了判定 ---
-                const sequence = getRoundHoleSequence(state.startHole, settings.roundLength);
+                // --- 3. ゲーム終了判定 ---
                 const completedHoleNumbers = new Set(newHistory.map(h => h.holeNumber));
                 const isGameOver = sequence.every(n => completedHoleNumbers.has(n));
                 const sequenceIndex = sequence.indexOf(holeNumber);
@@ -463,10 +445,8 @@ export const useGameStore = create<GameStore>()(
                     : sequence[Math.min(sequenceIndex + 1, sequence.length - 1)] ?? holeNumber;
                 const nextStatus: GameState['gameStatus'] = isGameOver ? 'finished' : 'playing';
 
-                // --- 6. 次ホールのランク付け（前ホールの打数順）。保存・表示用 ---
-                const realPlayerIds = players.filter(p => p.type !== 'bogey_kun').map(p => p.id);
-                const nextRanking = computeRankingForHole(realPlayerIds, sequence, newHistory, nextHole);
-                const fullRanking = settings.playerCount === 3 ? [...nextRanking, BOGEY_KUN_ID] : nextRanking;
+                // --- 4. 次ホールのランク付け（前ホールの打数順。ボギーくんも打数で並べる）。保存・表示用 ---
+                const fullRanking = computeRankingForHole(players.map(p => p.id), sequence, newHistory, nextHole);
 
                 set({
                     history: newHistory,
@@ -532,13 +512,10 @@ export const useGameStore = create<GameStore>()(
                     };
                 }
 
+                // 3人モードでは players の末尾にボギーくんがいるため、初ホールは4番手、
+                // 以降は前ホールの打数（par+1）で実プレイヤーと一緒に並べる
                 const sequence = getRoundHoleSequence(startHole, settings.roundLength);
-                const baseRanking = computeRankingForHole(realPlayers.map(p => p.id), sequence, history, holeNumber);
-
-                // 3人モード: bogey_kun を末尾に追加してランキングを4人分に
-                const fullRanking: PlayerId[] = settings.playerCount === 3
-                    ? [...baseRanking, BOGEY_KUN_ID]
-                    : baseRanking;
+                const fullRanking = computeRankingForHole(players.map(p => p.id), sequence, history, holeNumber);
 
                 if (fullRanking.length < 4) {
                     return {
@@ -567,10 +544,14 @@ export const useGameStore = create<GameStore>()(
             // ── ホールリセット ───────────────────────────────────────
             resetHole: (holeNumber) => {
                 const { history, players, settings, startHole } = get();
-                const newHistory = history.filter(h => h.holeNumber !== holeNumber);
+                const sequence = getRoundHoleSequence(startHole, settings.roundLength);
+                const newHistory = recalculateHistory(
+                    history.filter(h => h.holeNumber !== holeNumber),
+                    sequence,
+                    settings.playerCount,
+                );
                 const rebuiltPushState = rebuildPushStateFromHistory(players, newHistory, settings);
 
-                const sequence = getRoundHoleSequence(startHole, settings.roundLength);
                 const holeIndex = sequence.indexOf(holeNumber);
                 const previousHole = holeIndex > 0 ? sequence[holeIndex - 1] : null;
                 const prevResult = previousHole ? newHistory.find(h => h.holeNumber === previousHole) : undefined;

@@ -10,7 +10,7 @@ import { HoleResult, PlayerId } from '../types';
  * 保存済みの順位に頼らず履歴から毎回計算するため、過去ホールの修正や
  * ホール移動をしても組み合わせがずれない。
  *
- * @param playerIds 開始時の入力順（実プレイヤーのみ）
+ * @param playerIds 開始時の入力順（3人モードはボギーくんを末尾に含む）
  * @param sequence  プレー順のホール番号列（OUT開始: 1..18, IN開始: 10..18,1..9）
  */
 export function computeRankingForHole(

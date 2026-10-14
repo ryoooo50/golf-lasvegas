@@ -324,6 +324,100 @@ describe('recommended pairs by previous hole strokes', () => {
     });
 });
 
+describe('3 player mode ranking includes bogey-kun', () => {
+    beforeEach(() => {
+        useGameStore.getState().resetGame();
+        useGameStore.setState({ savedRounds: [], pendingCloudSaves: [], playerProfiles: [] });
+        useGameStore.getState().updateSettings({ playerCount: 3 });
+        useGameStore.getState().startGame(1);
+    });
+
+    function completeThreePlayerHole(holeNumber: number, strokes: Record<PlayerId, number>) {
+        useGameStore.getState().completeHole({
+            par: 4,
+            scores: Object.fromEntries(Object.entries(strokes).map(([id, s]) => [id, scoreInput(s)])),
+            teamA_Ids: ['p1', 'p2'],
+            teamB_Ids: ['p3', BOGEY_KUN_ID],
+            holeNumber,
+        });
+    }
+
+    test('bogey-kun is ranked by its bogey score, not fixed to 4th', () => {
+        // hole 1: p1 par, p2 double bogey, p3 par, bogey-kun bogey → p1, p3, bogey-kun, p2
+        completeThreePlayerHole(1, { p1: 4, p2: 6, p3: 4 });
+        expect(useGameStore.getState().playerRanking).toEqual(['p1', 'p3', BOGEY_KUN_ID, 'p2']);
+    });
+
+    test('ties are broken by the previous hole order', () => {
+        // hole 1: p3 best, then p1, bogey-kun, p2 → p3, p1, bogey-kun, p2
+        completeThreePlayerHole(1, { p1: 4, p2: 6, p3: 3 });
+        // hole 2: p1 & p3 par (p3 was better before), bogey-kun bogey, p2 double bogey
+        completeThreePlayerHole(2, { p1: 4, p2: 6, p3: 4 });
+        expect(useGameStore.getState().playerRanking).toEqual(['p3', 'p1', BOGEY_KUN_ID, 'p2']);
+        // hole 3 pattern: P1+P4 vs P2+P3
+        expect(useGameStore.getState().getRecommendedPairs(3)).toEqual({
+            teamA: ['p3', 'p2'],
+            teamB: ['p1', BOGEY_KUN_ID],
+        });
+    });
+
+    test('bogey-kun starts 4th on the first hole', () => {
+        expect(useGameStore.getState().getRecommendedPairs(1)).toEqual({
+            teamA: ['p1', 'p2'],
+            teamB: ['p3', BOGEY_KUN_ID],
+        });
+    });
+});
+
+describe('editing an earlier hole recalculates the following holes', () => {
+    beforeEach(() => {
+        startFreshGame();
+    });
+
+    const hole2 = () => useGameStore.getState().history.find(h => h.holeNumber === 2)!;
+
+    test('removing a draw on hole 1 removes the carry-over on hole 2', () => {
+        // 期待値: 最初から hole 1 で決着していた場合の hole 2
+        completeTestHole(1, { p1: { score: 3 } });
+        completeTestHole(2, { p1: { score: 3 } });
+        const expected = hole2();
+
+        // hole 1 引き分け → hole 2 にキャリーオーバー
+        startFreshGame();
+        completeTestHole(1);
+        completeTestHole(2, { p1: { score: 3 } });
+        expect(hole2().carryOverMultiplier).toBeGreaterThan(expected.carryOverMultiplier);
+
+        // hole 1 を修正して決着させる
+        useGameStore.getState().goToHole(1);
+        completeTestHole(1, { p1: { score: 3 } });
+
+        expect(hole2().carryOverMultiplier).toBe(expected.carryOverMultiplier);
+        expect(hole2().pointsResult).toEqual(expected.pointsResult);
+        expect(useGameStore.getState().getPlayerTotalScore('p1'))
+            .toBe(expected.pointsResult.p1 + useGameStore.getState().history[0].pointsResult.p1);
+    });
+
+    test('making hole 1 a draw adds the carry-over to hole 2 and to the current hole', () => {
+        completeTestHole(1, { p1: { score: 3 } });
+        completeTestHole(2, { p1: { score: 3 } });
+        const before = hole2();
+
+        useGameStore.getState().goToHole(1);
+        completeTestHole(1);
+
+        expect(hole2().carryOverMultiplier).toBeGreaterThan(before.carryOverMultiplier);
+        expect(Math.abs(hole2().pointsResult.p1)).toBeGreaterThan(Math.abs(before.pointsResult.p1));
+    });
+
+    test('resetting a hole recalculates the holes after it', () => {
+        completeTestHole(1);
+        completeTestHole(2, { p1: { score: 3 } });
+        useGameStore.getState().resetHole(1);
+        expect(hole2().carryOverMultiplier).toBe(0);
+    });
+});
+
 describe('claimLegacyLocalData', () => {
     const LEGACY_ID = '11111111-2222-3333-4444-555555555555';
     const NEW_ID = 'Xk3v9QmZp2LrT8wYc4NbH6dJf1sGa7eU';
