@@ -36,6 +36,9 @@ export const ScoreInputScreen = () => {
     const [birdieFlags, setBirdieFlags] = useState<Record<PlayerId, boolean>>({});
     const [pushCounts, setPushCounts] = useState<Record<PlayerId, number>>({});
     const [teamAssignments, setTeamAssignments] = useState<Record<PlayerId, 'A' | 'B'>>({});
+    // 入力 state がどのホールのものか。ホール移動直後の1レンダーは前ホールの値が残っているため、
+    // これが currentHole と一致するまでドラフト保存しない（前ホールの値が次ホールに引き継がれるのを防ぐ）
+    const [loadedHole, setLoadedHole] = useState<number | null>(null);
 
     const [isParDialogVisible, setIsParDialogVisible] = useState(false);
     const [isNameDialogVisible, setIsNameDialogVisible] = useState(false);
@@ -52,6 +55,7 @@ export const ScoreInputScreen = () => {
 
     useEffect(() => {
         bgScrollRef.current?.scrollTo({ y: 0, animated: true });
+        setLoadedHole(currentHole);
         const savedHole = history.find(h => h.holeNumber === currentHole);
 
         if (savedHole) {
@@ -111,6 +115,7 @@ export const ScoreInputScreen = () => {
     }, [currentHole, history, getRecommendedPairs]);
 
     useEffect(() => {
+        if (loadedHole !== currentHole) return;
         if (Object.keys(teamAssignments).length === 0) return;
         saveDraft({
             holeNumber: currentHole,
@@ -120,7 +125,7 @@ export const ScoreInputScreen = () => {
             pushCounts,
             teamAssignments,
         });
-    }, [currentHole, par, scores, birdieFlags, pushCounts, teamAssignments, saveDraft]);
+    }, [currentHole, loadedHole, par, scores, birdieFlags, pushCounts, teamAssignments, saveDraft]);
 
     useEffect(() => {
         if (par === null) setIsParDialogVisible(true);
