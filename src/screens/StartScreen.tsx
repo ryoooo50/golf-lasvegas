@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +16,8 @@ import { C } from "../theme/colors";
 import { Player, PlayerHandicap } from "../types";
 
 const DEFAULT_PLAYER_NAMES = ["Player 1", "Player 2", "Player 3", "Player 4"];
+// app.json の version
+const APP_VERSION = Constants.expoConfig?.version ?? "";
 
 export const StartScreen = () => {
   const router = useRouter();
@@ -194,6 +197,7 @@ export const StartScreen = () => {
             </View>
             <Text style={styles.brandText}>GOLF LAS VEGAS</Text>
           </View>
+          {APP_VERSION ? <Text style={styles.versionText}>v{APP_VERSION}</Text> : null}
           <Text style={styles.title}>試合をセットアップ</Text>
 
           {pausedRounds.map((round) => (
@@ -514,6 +518,12 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
     paddingRight: 12,
     borderRadius: 999,
+    marginBottom: 6,
+  },
+  versionText: {
+    fontSize: 11,
+    color: C.ink4,
+    marginLeft: 4,
     marginBottom: 16,
   },
   brandIcon: {
