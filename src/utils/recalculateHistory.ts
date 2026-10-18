@@ -44,7 +44,9 @@ export function recalculateHistory(
             ? applySoloPlayerPointMultiplier(result.pointsResult, saved.teamA_Ids, saved.teamB_Ids)
             : result.pointsResult;
 
-        recalculated.set(holeNumber, { ...result, pointsResult });
+        // ニアピンはラスベガスの計算に関係しない入力なので、保存済みの値をそのまま引き継ぐ
+        const nearPin = saved.nearPinWinnerId !== undefined ? { nearPinWinnerId: saved.nearPinWinnerId } : {};
+        recalculated.set(holeNumber, { ...result, pointsResult, ...nearPin });
         carryMultiplier = result.nextHoleMultiplier;
     }
 

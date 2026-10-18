@@ -6,6 +6,7 @@ import { Alert, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 
 import { Button, RadioButton, Text, TextInput } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { HandicapDialog } from "../components/shared/HandicapDialog";
+import { NearPinRateSelector } from "../components/shared/NearPinRateSelector";
 import { PlayerNamesForm } from "../components/shared/PlayerNamesForm";
 import { SyncStatusBanner } from "../components/shared/SyncStatusBanner";
 import { useAuthStore } from "../store/authStore";
@@ -32,6 +33,7 @@ export const StartScreen = () => {
   );
   const [memo, setMemo] = useState(settings.memo ?? "");
   const [rate, setRate] = useState((settings.rate ?? 10).toString());
+  const [nearPinRate, setNearPinRate] = useState(settings.nearPinRate ?? 0);
   const [playerCount, setPlayerCount] = useState<3 | 4>(
     settings.playerCount ?? 4,
   );
@@ -103,6 +105,7 @@ export const StartScreen = () => {
       playedAt,
       memo,
       rate: isNaN(parsedRate) ? 10 : parsedRate,
+      nearPinRate,
       maxPushCountPerHalf: pushLimit,
       playerCount,
       roundLength,
@@ -258,6 +261,8 @@ export const StartScreen = () => {
               mode="outlined"
               accessibilityLabel={t("setup.rateLabel")}
             />
+
+            <NearPinRateSelector value={nearPinRate} onChange={setNearPinRate} />
 
             {/* Player Count */}
             <Text style={styles.fieldLabel}>{t("setup.playerCount")}</Text>

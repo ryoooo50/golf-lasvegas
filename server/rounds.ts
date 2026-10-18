@@ -9,6 +9,7 @@ const COLUMN_TYPES = {
     push_limit: 'number',
     push_recovery_on_birdie: 'number',
     push_recovery_on_eagle: 'number',
+    near_pin_rate: 'number',
     holes: 'json',
     total_points: 'json',
     status: 'string',

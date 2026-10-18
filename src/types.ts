@@ -95,6 +95,9 @@ export interface HoleResult {
   pointsResult: Record<PlayerId, number>;
   nextHoleMultiplier: number;
   breakdown: CalculationBreakdown; // 詳細計算内訳
+
+  // ニアピン（ニアピンありのラウンドのパー3のみ）。null = 該当なし（次のパー3に持ち越し）
+  nearPinWinnerId?: PlayerId | null;
 }
 
 export interface HoleDraft {
@@ -104,6 +107,7 @@ export interface HoleDraft {
   birdieFlags: Record<PlayerId, boolean>;
   pushCounts: Record<PlayerId, number>;
   teamAssignments: Record<PlayerId, 'A' | 'B'>;
+  nearPinWinnerId?: PlayerId | null; // undefined = 未選択, null = 該当なし
 }
 
 // ─── ホールデータ（新アーキテクチャ用） ───────────────────────────
@@ -173,6 +177,7 @@ export interface GameState {
     roundLength: RoundLength;  // 9ホール or 18ホール
     pushRecoveryOnBirdie: number; // バーディーで復活するプッシュ権利数（0で無効、デフォルト1）
     pushRecoveryOnEagle: number;  // イーグル以下で復活するプッシュ権利数（0で無効、デフォルト2）
+    nearPinRate: number;          // ニアピン1回・1人あたりの額（円）。0 = ニアピンなし
   };
 
   // Saved Rounds
@@ -212,6 +217,7 @@ export interface PendingCloudSave {
     push_limit: number;
     push_recovery_on_birdie: number;
     push_recovery_on_eagle: number;
+    near_pin_rate?: number;
     holes: unknown;
     total_points: Record<string, number>;
     status: RoundStatus;

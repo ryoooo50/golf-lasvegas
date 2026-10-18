@@ -36,7 +36,9 @@ export function PlayerScoreCard({
     const isOverLimit = pushCount > available;
     const canPush = true; // 上限超過も許可（フィールドでの追加対応）
 
-    const handicap = player.type === 'bogey_kun' ? undefined : player.handicap;
+    // ボギーくんのスコアは画面側で par+1 に固定されるため、入力・プッシュは受け付けない
+    const isAutoScore = player.type === 'bogey_kun';
+    const handicap = isAutoScore ? undefined : player.handicap;
     const netScore = par !== null && score !== undefined && score > 0 ? applyHandicap(score, par, handicap) : undefined;
     const isNetAdjusted = netScore !== undefined && netScore !== score;
     const isAutoEagle = par !== null && netScore !== undefined && netScore <= par - 2;
@@ -131,12 +133,14 @@ export function PlayerScoreCard({
 
             {/* スコアステッパー */}
             <View style={styles.stepper}>
-                <TouchableOpacity onPress={decrement} style={[styles.stepBtn, { borderColor: C.line }]}>
-                    <Text style={[styles.stepBtnText, { color: C.ink3 }]}>−</Text>
-                </TouchableOpacity>
+                {isAutoScore ? <View style={styles.stepBtn} /> : (
+                    <TouchableOpacity onPress={decrement} style={[styles.stepBtn, { borderColor: C.line }]}>
+                        <Text style={[styles.stepBtnText, { color: C.ink3 }]}>−</Text>
+                    </TouchableOpacity>
+                )}
                 <View style={styles.scoreDisplay}>
                     <Text style={[styles.scoreNum, score === undefined && styles.scoreNumEmpty]}>
-                        {score !== undefined ? score : (par ?? '—')}
+                        {score !== undefined ? score : (isAutoScore ? '—' : (par ?? '—'))}
                     </Text>
                     {diffLabel !== '' && (
                         <Text style={[styles.diffLabel, { color: diffColor }]}>
@@ -144,29 +148,37 @@ export function PlayerScoreCard({
                         </Text>
                     )}
                 </View>
-                <TouchableOpacity onPress={increment} style={[styles.stepBtn, { borderColor: C.line }]}>
-                    <Text style={[styles.stepBtnText, { color: C.ink3 }]}>+</Text>
-                </TouchableOpacity>
+                {isAutoScore ? <View style={styles.stepBtn} /> : (
+                    <TouchableOpacity onPress={increment} style={[styles.stepBtn, { borderColor: C.line }]}>
+                        <Text style={[styles.stepBtnText, { color: C.ink3 }]}>+</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
-            {/* プッシュバッジ */}
-            <TouchableOpacity
-                onPress={() => onPushCycle(player.id)}
-                disabled={!canPush}
-                style={[
-                    styles.pushPill,
-                    isOverLimit
-                        ? { backgroundColor: C.coralPrimary, borderColor: C.coralPrimary }
-                        : pushCount > 0
-                        ? { backgroundColor: C.sky, borderColor: C.sky }
-                        : { backgroundColor: C.skyTint, borderColor: 'rgba(91,141,184,0.3)' },
-                ]}
-            >
-                <Text style={[styles.pushText, { color: pushCount > 0 ? '#fff' : C.sky }]}>
-                    {t('common.push')}{pushCount > 0 ? ` ×${pushCount}` : ''}
-                    {isOverLimit ? '  ⚠️' : `  残${Math.max(0, available - pushCount)}`}
-                </Text>
-            </TouchableOpacity>
+            {/* プッシュバッジ（ボギーくんは自動入力の説明に置き換える） */}
+            {isAutoScore ? (
+                <View style={styles.autoNote}>
+                    <Text style={styles.autoNoteText}>{t('common.bogeyKunAuto')}</Text>
+                </View>
+            ) : (
+                <TouchableOpacity
+                    onPress={() => onPushCycle(player.id)}
+                    disabled={!canPush}
+                    style={[
+                        styles.pushPill,
+                        isOverLimit
+                            ? { backgroundColor: C.coralPrimary, borderColor: C.coralPrimary }
+                            : pushCount > 0
+                            ? { backgroundColor: C.sky, borderColor: C.sky }
+                            : { backgroundColor: C.skyTint, borderColor: 'rgba(91,141,184,0.3)' },
+                    ]}
+                >
+                    <Text style={[styles.pushText, { color: pushCount > 0 ? '#fff' : C.sky }]}>
+                        {t('common.push')}{pushCount > 0 ? ` ×${pushCount}` : ''}
+                        {isOverLimit ? '  ⚠️' : `  残${Math.max(0, available - pushCount)}`}
+                    </Text>
+                </TouchableOpacity>
+            )}
         </View>
     );
 }
@@ -240,5 +252,14 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     pushPillDisabled: { opacity: 0.4 },
+    autoNote: {
+        borderRadius: 6,
+        paddingVertical: 5,
+        paddingHorizontal: 8,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: C.line,
+    },
+    autoNoteText: { fontSize: 10, fontWeight: '600', color: C.ink3 },
     pushText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
 });

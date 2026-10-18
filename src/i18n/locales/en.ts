@@ -105,6 +105,12 @@ export default {
             pendingSyncStatus: "{{count}} item(s) waiting to sync",
             syncedStatus: "Synced to cloud",
             localOnlyStatus: "Saved on this device",
+            nearPin: "Closest to pin",
+            nearPinNoWinner: "No winner",
+            nearPinStake: "{{amount}} each",
+            nearPinStakeWithCarryOver: "Carried over ×{{count}} · {{amount}} each",
+            nearPinAmount: "Closest to pin {{amount}}",
+            bogeyKunAuto: "Auto (par +1)",
         },
         setup: {
             playerCount: "Players",
@@ -136,6 +142,9 @@ export default {
             handicapHelp: "With a cap, the handicap never makes the score better than par (or bogey).",
             handicapButton: "Handicap: {{value}}",
             net: "Net {{score}}",
+            nearPinLabel: "Closest to pin (per hole, per player)",
+            nearPinNone: "None",
+            nearPinRateOption: "¥{{amount}}",
         },
         admin: {
             title: "User Management",

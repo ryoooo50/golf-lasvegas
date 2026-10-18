@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { NearPinRateSelector } from '../components/shared/NearPinRateSelector';
 import { ScreenHeader } from '../components/shared/ScreenHeader';
 import { C } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
@@ -29,6 +30,7 @@ export const SettingsScreen = () => {
     const { signOut, user, isGuest } = useAuthStore();
 
     const [editRate, setEditRate] = useState(settings.rate.toString());
+    const [nearPinRate, setNearPinRate] = useState(settings.nearPinRate ?? 0);
     const [courseName, setCourseName] = useState(settings.courseName);
     const [playedAt, setPlayedAt] = useState(settings.playedAt);
     const [memo, setMemo] = useState(settings.memo);
@@ -39,6 +41,7 @@ export const SettingsScreen = () => {
     const handleSave = () => {
         updateSettings({
             rate: parseInt(editRate, 10) || settings.rate,
+            nearPinRate,
             courseName,
             playedAt,
             memo,
@@ -137,6 +140,10 @@ export const SettingsScreen = () => {
                     style={styles.input}
                 />
 
+                <View style={styles.nearPinBlock}>
+                    <NearPinRateSelector value={nearPinRate} onChange={setNearPinRate} />
+                </View>
+
                 <Stepper label={t('setup.pushLimitLabel')} value={pushLimit} onChange={setPushLimit} />
                 <Stepper label={t('setup.pushRecoveryBirdieLabel')} value={pushRecoveryOnBirdie} onChange={setPushRecoveryOnBirdie} />
                 <Stepper label={t('setup.pushRecoveryEagleLabel')} value={pushRecoveryOnEagle} onChange={setPushRecoveryOnEagle} />
@@ -178,6 +185,7 @@ const styles = StyleSheet.create({
     input: { marginBottom: 12, backgroundColor: C.surface },
     fieldLabel: { fontSize: 13, color: C.ink3, fontWeight: '600', marginBottom: 4 },
     stepperBlock: { marginBottom: 14 },
+    nearPinBlock: { marginBottom: 10 },
     stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
     stepperBtn: { minWidth: 48 },
     stepperValue: { fontSize: 20, fontWeight: '700', width: 32, textAlign: 'center', color: C.ink },

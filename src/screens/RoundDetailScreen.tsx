@@ -11,7 +11,12 @@ import { exportRoundCsv, exportRoundPdf } from '../services/roundExport';
 import { useAuthStore } from '../store/authStore';
 import { useGameStore } from '../store/gameStore';
 import { C } from '../theme/colors';
+import { nearPinAmountsForRound } from '../utils/nearPin';
 import { calculateMinimumSettlement } from '../utils/settlement';
+
+function formatSignedAmount(amount: number): string {
+    return `${amount > 0 ? '+' : ''}${amount.toLocaleString()}`;
+}
 
 export function RoundDetailScreen() {
     const router = useRouter();
@@ -24,9 +29,10 @@ export function RoundDetailScreen() {
     ));
     const cardRef = useRef<View>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const nearPinAmounts = useMemo(() => round ? nearPinAmountsForRound(round) : {}, [round]);
     const transfers = useMemo(
-        () => round ? calculateMinimumSettlement(round.players, round.finalScores, round.settings.rate) : [],
-        [round],
+        () => round ? calculateMinimumSettlement(round.players, round.finalScores, round.settings.rate, nearPinAmounts) : [],
+        [round, nearPinAmounts],
     );
 
     if (!round) {
@@ -81,6 +87,7 @@ export function RoundDetailScreen() {
     };
 
     const realPlayers = round.players.filter(player => player.type !== 'bogey_kun');
+    const hasNearPin = (round.settings.nearPinRate ?? 0) > 0;
 
     return (
         <SafeAreaView style={styles.root} edges={['bottom', 'left', 'right']}>
@@ -97,13 +104,21 @@ export function RoundDetailScreen() {
                     <Text style={styles.sectionTitle}>{t('common.finalResult')}</Text>
                     {realPlayers.map(player => {
                         const points = round.finalScores[player.id] ?? 0;
+                        const nearPinAmount = nearPinAmounts[player.id] ?? 0;
                         return (
                             <View key={player.id} style={styles.scoreRow}>
-                                <Text style={styles.playerName}>{player.name}</Text>
+                                <View style={styles.playerCell}>
+                                    <Text style={styles.playerName}>{player.name}</Text>
+                                    {hasNearPin && (
+                                        <Text style={styles.nearPinText}>
+                                            {t('common.nearPinAmount', { amount: formatSignedAmount(nearPinAmount) })}
+                                        </Text>
+                                    )}
+                                </View>
                                 <Text style={[styles.points, points > 0 ? styles.positive : points < 0 ? styles.negative : null]}>
                                     {points > 0 ? '+' : ''}{points} pt
                                 </Text>
-                                <Text style={styles.amount}>{(points * round.settings.rate).toLocaleString()}</Text>
+                                <Text style={styles.amount}>{(points * round.settings.rate + nearPinAmount).toLocaleString()}</Text>
                             </View>
                         );
                     })}
@@ -117,7 +132,7 @@ export function RoundDetailScreen() {
                                 {transfer.fromName} → {transfer.toName}
                             </Text>
                             <View style={styles.transferAmounts}>
-                                <Text style={styles.transferPoints}>{transfer.points} pt</Text>
+                                {transfer.points !== null && <Text style={styles.transferPoints}>{transfer.points} pt</Text>}
                                 <Text style={styles.transferMoney}>{transfer.amount.toLocaleString()}</Text>
                             </View>
                         </View>
@@ -152,7 +167,9 @@ const styles = StyleSheet.create({
     memo: { color: C.ink2, fontSize: 12, lineHeight: 18, backgroundColor: C.surface2, padding: 10, borderRadius: 6, marginTop: 12 },
     sectionTitle: { color: C.ink3, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 22, marginBottom: 8 },
     scoreRow: { flexDirection: 'row', alignItems: 'center', minHeight: 42, borderTopWidth: 1, borderTopColor: C.line2 },
-    playerName: { flex: 1, color: C.ink, fontSize: 14, fontWeight: '700' },
+    playerCell: { flex: 1, paddingVertical: 6 },
+    playerName: { color: C.ink, fontSize: 14, fontWeight: '700' },
+    nearPinText: { color: C.ink3, fontSize: 11, marginTop: 2 },
     points: { width: 72, textAlign: 'right', color: C.ink3, fontWeight: '800', fontVariant: ['tabular-nums'] },
     amount: { width: 80, textAlign: 'right', color: C.ink2, fontSize: 12, fontVariant: ['tabular-nums'] },
     positive: { color: C.greenDeep },

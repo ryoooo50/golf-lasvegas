@@ -5,7 +5,8 @@ export interface SettlementTransfer {
     fromName: string;
     toId: PlayerId;
     toName: string;
-    points: number;
+    /** ポイント換算。ニアピンなどポイント以外の金額を含む精算では null */
+    points: number | null;
     amount: number;
 }
 
@@ -15,14 +16,25 @@ interface BalanceEntry {
     balance: number;
 }
 
+/**
+ * 送金回数が最小になる精算を求める。
+ * extraAmounts（ニアピンなどの金額）があれば、収支 = ポイント × レート + extraAmounts の金額で精算する。
+ * 無ければ従来どおりポイントで精算し、金額はポイント × レートで出す。
+ */
 export function calculateMinimumSettlement(
     players: Player[],
     finalScores: Record<PlayerId, number>,
     rate: number,
+    extraAmounts: Record<PlayerId, number> = {},
 ): SettlementTransfer[] {
+    const hasExtraAmounts = Object.values(extraAmounts).some(amount => amount !== 0);
+    // balance の単位: extraAmounts があれば金額、無ければポイント
+    const balanceOf = (playerId: PlayerId) => hasExtraAmounts
+        ? (finalScores[playerId] ?? 0) * rate + (extraAmounts[playerId] ?? 0)
+        : finalScores[playerId] ?? 0;
     const balances: BalanceEntry[] = players
         .filter(player => player.type !== 'bogey_kun')
-        .map(player => ({ id: player.id, name: player.name, balance: finalScores[player.id] ?? 0 }))
+        .map(player => ({ id: player.id, name: player.name, balance: balanceOf(player.id) }))
         .filter(entry => entry.balance !== 0);
 
     const total = balances.reduce((sum, entry) => sum + entry.balance, 0);
@@ -45,12 +57,12 @@ export function calculateMinimumSettlement(
             if (first.balance * counterpart.balance >= 0 || triedBalances.has(counterpart.balance)) continue;
             triedBalances.add(counterpart.balance);
 
-            const points = Math.min(Math.abs(first.balance), Math.abs(counterpart.balance));
+            const settled = Math.min(Math.abs(first.balance), Math.abs(counterpart.balance));
             const debtor = first.balance < 0 ? first : counterpart;
             const creditor = first.balance > 0 ? first : counterpart;
             const nextEntries = entries.map(entry => ({ ...entry }));
-            nextEntries[firstIndex].balance += first.balance < 0 ? points : -points;
-            nextEntries[index].balance += counterpart.balance < 0 ? points : -points;
+            nextEntries[firstIndex].balance += first.balance < 0 ? settled : -settled;
+            nextEntries[index].balance += counterpart.balance < 0 ? settled : -settled;
 
             search(nextEntries, [
                 ...transfers,
@@ -59,8 +71,8 @@ export function calculateMinimumSettlement(
                     fromName: debtor.name,
                     toId: creditor.id,
                     toName: creditor.name,
-                    points,
-                    amount: points * rate,
+                    points: hasExtraAmounts ? null : settled,
+                    amount: hasExtraAmounts ? settled : settled * rate,
                 },
             ]);
         }

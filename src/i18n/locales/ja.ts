@@ -105,6 +105,12 @@ export default {
             pendingSyncStatus: "未同期 {{count}}件",
             syncedStatus: "クラウド同期済み",
             localOnlyStatus: "端末内に保存",
+            nearPin: "ニアピン",
+            nearPinNoWinner: "該当なし",
+            nearPinStake: "1人{{amount}}円",
+            nearPinStakeWithCarryOver: "持ち越し{{count}}回分 · 1人{{amount}}円",
+            nearPinAmount: "ニアピン {{amount}}",
+            bogeyKunAuto: "自動入力（パー+1）",
         },
         setup: {
             playerCount: "プレイヤー数",
@@ -136,6 +142,9 @@ export default {
             handicapHelp: "上限を決めると、ハンデを引いてもパー（ボギー）より良いスコアにはなりません。",
             handicapButton: "ハンデ: {{value}}",
             net: "ハンデ後 {{score}}",
+            nearPinLabel: "ニアピン（1回・1人あたり）",
+            nearPinNone: "なし",
+            nearPinRateOption: "{{amount}}円",
         },
         admin: {
             title: "ユーザー管理",

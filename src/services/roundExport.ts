@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import { RoundResult } from '../types';
 import { grossScoreOf } from '../utils/handicap';
+import { nearPinAmountsForRound } from '../utils/nearPin';
 import { calculateMinimumSettlement } from '../utils/settlement';
 
 function safeFilename(value: string): string {
@@ -26,16 +27,25 @@ function escapeHtml(value: unknown): string {
         .replace(/"/g, '&quot;');
 }
 
+/** ラスベガスの金額（ポイント × レート）とニアピンの合計 */
+function totalAmountOf(round: RoundResult, nearPinAmounts: Record<string, number>, playerId: string): number {
+    return (round.finalScores[playerId] ?? 0) * round.settings.rate + (nearPinAmounts[playerId] ?? 0);
+}
+
 export function buildRoundCsv(round: RoundResult): string {
     const realPlayers = round.players.filter(player => player.type !== 'bogey_kun');
+    const nearPinAmounts = nearPinAmountsForRound(round);
+    const hasNearPin = (round.settings.nearPinRate ?? 0) > 0;
     const rows: string[][] = [
         ['Match', round.name],
         ['Course', round.settings.courseName],
         ['Played At', round.settings.playedAt],
         ['Memo', round.settings.memo],
         [],
-        ['Hole', 'Par', ...realPlayers.map(player => player.name), ...realPlayers.map(player => `${player.name} points`)],
+        ['Hole', 'Par', ...realPlayers.map(player => player.name), ...realPlayers.map(player => `${player.name} points`), ...(hasNearPin ? ['Near Pin'] : [])],
     ];
+    const nameOf = (playerId: string | null | undefined) =>
+        playerId ? (round.players.find(player => player.id === playerId)?.name ?? playerId) : '-';
 
     [...round.history]
         .sort((a, b) => a.holeNumber - b.holeNumber)
@@ -45,19 +55,23 @@ export function buildRoundCsv(round: RoundResult): string {
                 String(hole.par),
                 ...realPlayers.map(player => String(grossScoreOf(hole.scores[player.id]) ?? '')),
                 ...realPlayers.map(player => String(hole.pointsResult[player.id] ?? 0)),
+                ...(hasNearPin && hole.nearPinWinnerId !== undefined ? [nameOf(hole.nearPinWinnerId)] : []),
             ]);
         });
 
     rows.push([], ['Final Points', '', ...realPlayers.map(player => String(round.finalScores[player.id] ?? 0))]);
-    rows.push(['Amount', '', ...realPlayers.map(player => String((round.finalScores[player.id] ?? 0) * round.settings.rate))]);
+    if (hasNearPin) {
+        rows.push(['Near Pin Amount', '', ...realPlayers.map(player => String(nearPinAmounts[player.id] ?? 0))]);
+    }
+    rows.push(['Amount', '', ...realPlayers.map(player => String(totalAmountOf(round, nearPinAmounts, player.id)))]);
 
-    const transfers = calculateMinimumSettlement(round.players, round.finalScores, round.settings.rate);
+    const transfers = calculateMinimumSettlement(round.players, round.finalScores, round.settings.rate, nearPinAmounts);
     rows.push([], ['Settlement']);
     transfers.forEach(transfer => rows.push([
         transfer.fromName,
         '->',
         transfer.toName,
-        String(transfer.points),
+        transfer.points === null ? '' : String(transfer.points),
         String(transfer.amount),
     ]));
 
@@ -66,17 +80,18 @@ export function buildRoundCsv(round: RoundResult): string {
 
 export function buildRoundHtml(round: RoundResult): string {
     const realPlayers = round.players.filter(player => player.type !== 'bogey_kun');
-    const transfers = calculateMinimumSettlement(round.players, round.finalScores, round.settings.rate);
+    const nearPinAmounts = nearPinAmountsForRound(round);
+    const transfers = calculateMinimumSettlement(round.players, round.finalScores, round.settings.rate, nearPinAmounts);
     const scoreRows = [...round.history]
         .sort((a, b) => a.holeNumber - b.holeNumber)
         .map(hole => `<tr><td>${hole.holeNumber}</td><td>${hole.par}</td>${realPlayers.map(player => `<td>${grossScoreOf(hole.scores[player.id]) ?? '-'}</td>`).join('')}</tr>`)
         .join('');
     const finalRows = realPlayers.map(player => {
         const points = round.finalScores[player.id] ?? 0;
-        return `<tr><td>${escapeHtml(player.name)}</td><td>${points > 0 ? '+' : ''}${points} pt</td><td>${(points * round.settings.rate).toLocaleString()}</td></tr>`;
+        return `<tr><td>${escapeHtml(player.name)}</td><td>${points > 0 ? '+' : ''}${points} pt</td><td>${totalAmountOf(round, nearPinAmounts, player.id).toLocaleString()}</td></tr>`;
     }).join('');
     const settlementRows = transfers.length > 0
-        ? transfers.map(transfer => `<li><strong>${escapeHtml(transfer.fromName)}</strong> → <strong>${escapeHtml(transfer.toName)}</strong>：${transfer.points} pt / ${transfer.amount.toLocaleString()}</li>`).join('')
+        ? transfers.map(transfer => `<li><strong>${escapeHtml(transfer.fromName)}</strong> → <strong>${escapeHtml(transfer.toName)}</strong>：${transfer.points === null ? '' : `${transfer.points} pt / `}${transfer.amount.toLocaleString()}</li>`).join('')
         : '<li>精算なし</li>';
 
     return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>

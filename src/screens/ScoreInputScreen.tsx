@@ -6,6 +6,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacit
 import { Button, Dialog, Portal, Text, TextInput } from 'react-native-paper';
 import { HoleHeader } from '../components/score-input/HoleHeader';
 import { LivePreviewPanel } from '../components/score-input/LivePreviewPanel';
+import { NearPinSelector } from '../components/score-input/NearPinSelector';
 import { ParSelectDialog } from '../components/score-input/ParSelectDialog';
 import { PlayerScoreCard } from '../components/score-input/PlayerScoreCard';
 import { ResultSummaryDialog } from '../components/score-input/ResultSummaryDialog';
@@ -18,6 +19,7 @@ import { HoleResult, Player, PlayerId, SaveRoundResult, ScoreInput } from '../ty
 import { confirmAction, notify } from '../utils/dialogs';
 import { calculateLivePreview } from '../utils/golfLogic';
 import { buildScoreInput, formatHandicap, grossScoreOf } from '../utils/handicap';
+import { isNearPinHole, nearPinCarryOverBefore } from '../utils/nearPin';
 
 export const ScoreInputScreen = () => {
     const router = useRouter();
@@ -36,6 +38,8 @@ export const ScoreInputScreen = () => {
     const [birdieFlags, setBirdieFlags] = useState<Record<PlayerId, boolean>>({});
     const [pushCounts, setPushCounts] = useState<Record<PlayerId, number>>({});
     const [teamAssignments, setTeamAssignments] = useState<Record<PlayerId, 'A' | 'B'>>({});
+    // ニアピンを取った人。undefined = 未選択, null = 該当なし
+    const [nearPinWinner, setNearPinWinner] = useState<PlayerId | null | undefined>(undefined);
     // 入力 state がどのホールのものか。ホール移動直後の1レンダーは前ホールの値が残っているため、
     // これが currentHole と一致するまでドラフト保存しない（前ホールの値が次ホールに引き継がれるのを防ぐ）
     const [loadedHole, setLoadedHole] = useState<number | null>(null);
@@ -77,6 +81,7 @@ export const ScoreInputScreen = () => {
             setBirdieFlags(savedBirdie);
             setPushCounts(savedPush);
             setTeamAssignments(savedAssignments);
+            setNearPinWinner(savedHole.nearPinWinnerId);
         } else {
             const persistedDraft = useGameStore.getState().draftHole;
             if (persistedDraft?.holeNumber === currentHole) {
@@ -85,11 +90,13 @@ export const ScoreInputScreen = () => {
                 setBirdieFlags(persistedDraft.birdieFlags);
                 setPushCounts(persistedDraft.pushCounts);
                 setTeamAssignments(persistedDraft.teamAssignments);
+                setNearPinWinner(persistedDraft.nearPinWinnerId);
                 return;
             }
             setPar(null);
             setScores({});
             setBirdieFlags({});
+            setNearPinWinner(undefined);
             const { teamA, teamB } = getRecommendedPairs(currentHole);
             const newAssignments: Record<PlayerId, 'A' | 'B'> = {};
             teamA.forEach(id => { newAssignments[id] = 'A'; });
@@ -124,19 +131,31 @@ export const ScoreInputScreen = () => {
             birdieFlags,
             pushCounts,
             teamAssignments,
+            nearPinWinnerId: nearPinWinner,
         });
-    }, [currentHole, loadedHole, par, scores, birdieFlags, pushCounts, teamAssignments, saveDraft]);
+    }, [currentHole, loadedHole, par, scores, birdieFlags, pushCounts, teamAssignments, nearPinWinner, saveDraft]);
 
     useEffect(() => {
         if (par === null) setIsParDialogVisible(true);
     }, [currentHole, par]);
 
+    // ボギーくんは常に par+1（入力不可）。パー未入力なら空欄
+    const effectiveScores = useMemo(() => {
+        const bogeyScores = Object.fromEntries(players
+            .filter(p => p.type === 'bogey_kun')
+            .map(p => [p.id, par === null ? undefined : par + 1]));
+        return { ...scores, ...bogeyScores };
+    }, [scores, players, par]);
+
     const isFront9 = currentHole <= 9;
     const teamA = players.filter(p => teamAssignments[p.id] === 'A');
     const teamB = players.filter(p => teamAssignments[p.id] === 'B');
+    const realPlayers = players.filter(p => p.type !== 'bogey_kun');
     const isValidTeams = teamA.length === 2 && teamB.length === 2;
-    const isScoresEntered = players.every(p => scores[p.id] !== undefined && (scores[p.id] ?? 0) > 0);
-    const canSubmit = isValidTeams && isScoresEntered && par !== null;
+    const isScoresEntered = players.every(p => effectiveScores[p.id] !== undefined && (effectiveScores[p.id] ?? 0) > 0);
+    const isNearPinOnHole = isNearPinHole(par, settings.nearPinRate);
+    const isNearPinEntered = !isNearPinOnHole || nearPinWinner !== undefined;
+    const canSubmit = isValidTeams && isScoresEntered && isNearPinEntered && par !== null;
     const isEditingExisting = history.some(h => h.holeNumber === currentHole);
     const hasCurrentInput = par !== null || Object.keys(scores).length > 0 || Object.keys(pushCounts).length > 0;
     const holeSequence = useMemo(
@@ -151,6 +170,12 @@ export const ScoreInputScreen = () => {
     const willCompleteRound = holeSequence.every(hole =>
         hole === currentHole || history.some(result => result.holeNumber === hole),
     );
+    const nearPinCarryOver = nearPinCarryOverBefore({
+        history,
+        sequence: holeSequence,
+        participantIds: realPlayers.map(p => p.id),
+        nearPinRate: settings.nearPinRate,
+    }, currentHole);
 
     // 実打数からハンデ適用後の ScoreInput を作る。バーディー/イーグルはハンデ適用後で判定する
     const toScoreInput = (player: Player, gross: number, parValue: number): ScoreInput => buildScoreInput({
@@ -168,7 +193,7 @@ export const ScoreInputScreen = () => {
         }
         const previewScores: Record<PlayerId, Partial<ScoreInput>> = {};
         players.forEach(p => {
-            const s = scores[p.id];
+            const s = effectiveScores[p.id];
             previewScores[p.id] = s === undefined
                 ? { pushCount: pushCounts[p.id] || 0 }
                 : toScoreInput(p, s, par);
@@ -182,7 +207,7 @@ export const ScoreInputScreen = () => {
         );
         // toScoreInput は pushCounts のみに依存するため依存配列には含めない
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [scores, pushCounts, par, nextHoleMultiplier, teamA, teamB, players, isValidTeams]);
+    }, [effectiveScores, pushCounts, par, nextHoleMultiplier, teamA, teamB, players, isValidTeams]);
 
     const liveMultiplier = livePreview.finalMultiplier;
 
@@ -244,7 +269,7 @@ export const ScoreInputScreen = () => {
 
         const scoreInputs: Record<PlayerId, ScoreInput> = {};
         players.forEach(p => {
-            scoreInputs[p.id] = toScoreInput(p, scores[p.id] || 0, par);
+            scoreInputs[p.id] = toScoreInput(p, effectiveScores[p.id] || 0, par);
         });
 
         const warning = getInputWarning(scoreInputs);
@@ -256,6 +281,7 @@ export const ScoreInputScreen = () => {
                 teamA_Ids: [teamA[0].id, teamA[1].id],
                 teamB_Ids: [teamB[0].id, teamB[1].id],
                 holeNumber: currentHole,
+                nearPinWinnerId: nearPinWinner ?? null,
             });
 
             if (finishRound) {
@@ -300,7 +326,7 @@ export const ScoreInputScreen = () => {
     };
 
     const handleSaveGame = async () => {
-        saveDraft({ holeNumber: currentHole, par, scores, birdieFlags, pushCounts, teamAssignments });
+        saveDraft({ holeNumber: currentHole, par, scores, birdieFlags, pushCounts, teamAssignments, nearPinWinnerId: nearPinWinner });
         const result = await pauseCurrentRound();
         notify(t('common.roundPaused'), cloudStatusMessage(result), t('common.ok'), () => router.replace('/'));
     };
@@ -318,6 +344,7 @@ export const ScoreInputScreen = () => {
             setScores({});
             setBirdieFlags({});
             setPushCounts({});
+            setNearPinWinner(undefined);
         };
         confirmAction({
             title: `${confirmationLabel}?`,
@@ -389,7 +416,7 @@ export const ScoreInputScreen = () => {
                                     key={p.id}
                                     player={p}
                                     team="A"
-                                    score={scores[p.id]}
+                                    score={effectiveScores[p.id]}
                                     isBirdie={birdieFlags[p.id] ?? false}
                                     pushCount={pushCounts[p.id] ?? 0}
                                     par={par}
@@ -416,7 +443,7 @@ export const ScoreInputScreen = () => {
                                     key={p.id}
                                     player={p}
                                     team="B"
-                                    score={scores[p.id]}
+                                    score={effectiveScores[p.id]}
                                     isBirdie={birdieFlags[p.id] ?? false}
                                     pushCount={pushCounts[p.id] ?? 0}
                                     par={par}
@@ -434,6 +461,16 @@ export const ScoreInputScreen = () => {
 
                         {!isValidTeams && (
                             <Text style={styles.errorText}>{t('common.teamAssignmentError')}</Text>
+                        )}
+
+                        {isNearPinOnHole && (
+                            <NearPinSelector
+                                players={realPlayers}
+                                selected={nearPinWinner}
+                                nearPinRate={settings.nearPinRate}
+                                carryOver={nearPinCarryOver}
+                                onSelect={setNearPinWinner}
+                            />
                         )}
 
                         <LivePreviewPanel

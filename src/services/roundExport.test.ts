@@ -33,6 +33,7 @@ const round: RoundResult = {
         roundLength: 9,
         pushRecoveryOnBirdie: 1,
         pushRecoveryOnEagle: 2,
+        nearPinRate: 0,
     },
     draftHole: null,
     updatedAt: '2026-08-31T00:00:00.000Z',
@@ -46,6 +47,26 @@ describe('round exports', () => {
         expect(csv.startsWith('\uFEFF')).toBe(true);
         expect(csv).toContain('"Sunday, Match"');
         expect(csv).toContain('"Bob","->","Alice","10","1000"');
+    });
+
+    test('adds near-pin money to the amounts and settlement', () => {
+        const nearPinRound: RoundResult = {
+            ...round,
+            history: [{
+                holeNumber: 3,
+                par: 3,
+                scores: {},
+                pointsResult: {},
+                nearPinWinnerId: 'p2',
+            } as unknown as RoundResult['history'][number]],
+            settings: { ...round.settings, nearPinRate: 500 },
+        };
+
+        const csv = buildRoundCsv(nearPinRound);
+        // Alice: 10pt × 100 - 500 = 500, Bob: -1000 + 500 = -500
+        expect(csv).toContain('"Near Pin Amount","","-500","500"');
+        expect(csv).toContain('"Amount","","500","-500"');
+        expect(csv).toContain('"Bob","->","Alice","","500"');
     });
 
     test('escapes user-entered text in PDF HTML', () => {

@@ -44,6 +44,8 @@ create table if not exists rounds (
   memo text not null default ''
 );
 create index if not exists rounds_user_id_created_at_idx on rounds (user_id, created_at desc);
+-- ニアピン1回・1人あたりの額（円）。0 = ニアピンなし
+alter table rounds add column if not exists near_pin_rate integer not null default 0;
 
 create or replace function update_updated_at()
 returns trigger as $$

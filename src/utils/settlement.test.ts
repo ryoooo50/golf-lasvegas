@@ -18,7 +18,7 @@ describe('calculateMinimumSettlement', () => {
 
         expect(result).toHaveLength(3);
         expect(result.reduce((sum, transfer) => sum + transfer.amount, 0)).toBe(4000);
-        expect(result.every(transfer => transfer.points > 0)).toBe(true);
+        expect(result.every(transfer => (transfer.points ?? 0) > 0)).toBe(true);
     });
 
     test('uses two transfers for two exact debtor-creditor pairs', () => {
@@ -32,5 +32,42 @@ describe('calculateMinimumSettlement', () => {
 
     test('returns no transfers for an unbalanced score set', () => {
         expect(calculateMinimumSettlement(players, { p1: 10, p2: 0, p3: 0, p4: 0 }, 1)).toEqual([]);
+    });
+
+    test('still lists point transfers when the rate is 0 and there is no extra money', () => {
+        const result = calculateMinimumSettlement(players, { p1: 30, p2: -30, p3: 0, p4: 0 }, 0);
+
+        expect(result).toEqual([
+            { fromId: 'p2', fromName: 'B', toId: 'p1', toName: 'A', points: 30, amount: 0 },
+        ]);
+    });
+
+    test('adds near-pin money to the point amounts before settling', () => {
+        const result = calculateMinimumSettlement(
+            players,
+            { p1: 10, p2: -10, p3: 0, p4: 0 },
+            10,
+            { p1: -500, p2: -500, p3: 1500, p4: -500 },
+        );
+
+        // p1: 100-500=-400, p2: -100-500=-600, p3: +1500, p4: -500
+        expect(result.every(transfer => transfer.toId === 'p3')).toBe(true);
+        expect(result.reduce((sum, transfer) => sum + transfer.amount, 0)).toBe(1500);
+        expect(result.find(transfer => transfer.fromId === 'p2')?.amount).toBe(600);
+        // ニアピンを含む金額はポイントに換算できないため points は持たない
+        expect(result.every(transfer => transfer.points === null)).toBe(true);
+    });
+
+    test('keeps points on transfers when there is no extra money', () => {
+        const result = calculateMinimumSettlement(
+            players,
+            { p1: 30, p2: -30, p3: 0, p4: 0 },
+            10,
+            { p1: 0, p2: 0, p3: 0, p4: 0 },
+        );
+
+        expect(result).toEqual([
+            { fromId: 'p2', fromName: 'B', toId: 'p1', toName: 'A', points: 30, amount: 300 },
+        ]);
     });
 });

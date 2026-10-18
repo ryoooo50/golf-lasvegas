@@ -7,6 +7,8 @@ import { useAuthStore } from './authStore';
 import { GameState, HoleDraft, HoleResult, PendingCloudSave, Player, PlayerHandicap, PlayerId, PlayerProfile, RoundResult, RoundStatus, SaveRoundResult, ScoreInput } from '../types';
 import { calculateHoleResult } from '../utils/golfLogic';
 import { hasHandicap } from '../utils/handicap';
+import { getRoundHoleSequence } from '../utils/holeSequence';
+import { isNearPinHole } from '../utils/nearPin';
 import { recalculateHistory } from '../utils/recalculateHistory';
 import { computeRankingForHole } from '../utils/teamRanking';
 import { BOGEY_KUN_ID, computeTeamPairs, findSoloPlayer } from '../utils/threePlayerMode';
@@ -63,6 +65,7 @@ function buildRoundSaveData(
         push_limit: settings.maxPushCountPerHalf,
         push_recovery_on_birdie: settings.pushRecoveryOnBirdie,
         push_recovery_on_eagle: settings.pushRecoveryOnEagle,
+        near_pin_rate: settings.nearPinRate,
         holes: history,
         total_points: totalPoints,
         status,
@@ -114,16 +117,6 @@ function updatePlayerProfiles(profiles: PlayerProfile[], names: string[], ownerI
         }
     }
     return next.sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || b.useCount - a.useCount || b.lastUsedAt.localeCompare(a.lastUsedAt));
-}
-
-export function getRoundHoleSequence(startHole: 1 | 10, roundLength: 9 | 18): number[] {
-    const fullSequence = startHole === 1
-        ? Array.from({ length: 18 }, (_, index) => index + 1)
-        : [
-            ...Array.from({ length: 9 }, (_, index) => index + 10),
-            ...Array.from({ length: 9 }, (_, index) => index + 1),
-        ];
-    return fullSequence.slice(0, roundLength);
 }
 
 function rebuildPushStateFromHistory(
@@ -272,6 +265,8 @@ interface GameActions {
         teamA_Ids: [PlayerId, PlayerId];
         teamB_Ids: [PlayerId, PlayerId];
         holeNumber: number;
+        /** ニアピンを取った人。null = 該当なし。ニアピンありのパー3以外では無視する */
+        nearPinWinnerId?: PlayerId | null;
     }) => void;
 
     resetGame: () => void;
@@ -343,6 +338,7 @@ const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
         roundLength: 18,
         pushRecoveryOnBirdie: 1,
         pushRecoveryOnEagle: 2,
+        nearPinRate: 0,
     },
     savedRounds: [],
     playerProfiles: [],
@@ -400,7 +396,7 @@ export const useGameStore = create<GameStore>()(
             },
 
             // ── ホール確定 ───────────────────────────────────────────
-            completeHole: ({ par, scores, teamA_Ids, teamB_Ids, holeNumber }) => {
+            completeHole: ({ par, scores, teamA_Ids, teamB_Ids, holeNumber, nearPinWinnerId }) => {
                 const state = get();
                 const { players, history, settings } = state;
 
@@ -426,8 +422,11 @@ export const useGameStore = create<GameStore>()(
                     teamB_Ids,
                     currentCarryOverLevel: 0, // 倍率は recalculateHistory で前ホールから求め直す
                 });
+                const enteredWithNearPin = isNearPinHole(par, settings.nearPinRate)
+                    ? { ...entered, nearPinWinnerId: nearPinWinnerId ?? null }
+                    : entered;
                 const newHistory = recalculateHistory(
-                    [...history.filter(h => h.holeNumber !== holeNumber), entered],
+                    [...history.filter(h => h.holeNumber !== holeNumber), enteredWithNearPin],
                     sequence,
                     settings.playerCount,
                 );
@@ -900,6 +899,7 @@ export const useGameStore = create<GameStore>()(
                             maxPushCountPerHalf: r.push_limit,
                             pushRecoveryOnBirdie: r.push_recovery_on_birdie,
                             pushRecoveryOnEagle: r.push_recovery_on_eagle,
+                            nearPinRate: r.near_pin_rate ?? 0,
                             roundLength: r.round_length ?? 18,
                             courseName: r.course_name ?? '',
                             playedAt: r.played_at ?? '',
@@ -1039,6 +1039,7 @@ export const useGameStore = create<GameStore>()(
                     if (state.settings && !('courseName' in state.settings)) (state.settings as GameState['settings']).courseName = '';
                     if (state.settings && !('playedAt' in state.settings)) (state.settings as GameState['settings']).playedAt = '';
                     if (state.settings && !('memo' in state.settings)) (state.settings as GameState['settings']).memo = '';
+                    if (state.settings && !('nearPinRate' in state.settings)) (state.settings as GameState['settings']).nearPinRate = 0;
                     state.savedRounds = (state.savedRounds ?? []).map(round => ({
                         ...round,
                         gameStatus: round.gameStatus === 'paused' ? 'paused' : 'completed',
@@ -1063,4 +1064,4 @@ export const useGameStore = create<GameStore>()(
 );
 
 // ─── ユーティリティエクスポート ────────────────────────────────────
-export { BOGEY_KUN_ID, BOGEY_KUN_PLAYER, computeTeamPairs, findSoloPlayer, getRemainingPush };
+export { BOGEY_KUN_ID, BOGEY_KUN_PLAYER, computeTeamPairs, findSoloPlayer, getRemainingPush, getRoundHoleSequence };

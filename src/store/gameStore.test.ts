@@ -550,3 +550,59 @@ describe('player handicap', () => {
         expect(round?.players.find(p => p.id === 'p2')?.handicap).toBeUndefined();
     });
 });
+
+describe('near pin', () => {
+    beforeEach(() => {
+        startFreshGame();
+        useGameStore.getState().updateSettings({ nearPinRate: 500 });
+    });
+
+    function completeHoleWithNearPin(holeNumber: number, par: number, nearPinWinnerId: PlayerId | null) {
+        useGameStore.getState().completeHole({
+            par,
+            scores: { p1: scoreInput(par), p2: scoreInput(par), p3: scoreInput(par), p4: scoreInput(par) },
+            teamA_Ids: ['p1', 'p2'],
+            teamB_Ids: ['p3', 'p4'],
+            holeNumber,
+            nearPinWinnerId,
+        });
+    }
+
+    const holeOf = (holeNumber: number) => useGameStore.getState().history.find(h => h.holeNumber === holeNumber);
+
+    test('records the winner and a no-winner result on par 3 holes', () => {
+        completeHoleWithNearPin(1, 3, 'p2');
+        completeHoleWithNearPin(2, 3, null);
+
+        expect(holeOf(1)?.nearPinWinnerId).toBe('p2');
+        expect(holeOf(2)?.nearPinWinnerId).toBeNull();
+    });
+
+    test('does not record a near pin on holes that are not par 3', () => {
+        completeHoleWithNearPin(1, 4, 'p2');
+
+        expect(holeOf(1)).not.toHaveProperty('nearPinWinnerId');
+    });
+
+    test('does not record a near pin when near pin is off', () => {
+        useGameStore.getState().updateSettings({ nearPinRate: 0 });
+        completeHoleWithNearPin(1, 3, 'p2');
+
+        expect(holeOf(1)).not.toHaveProperty('nearPinWinnerId');
+    });
+
+    test('keeps later near-pin results when an earlier hole is edited', () => {
+        completeHoleWithNearPin(1, 4, null);
+        completeHoleWithNearPin(2, 3, 'p3');
+        useGameStore.getState().goToHole(1);
+        completeHoleWithNearPin(1, 5, null);
+
+        expect(holeOf(2)?.nearPinWinnerId).toBe('p3');
+    });
+
+    test('keeps the near-pin setting on the saved round', async () => {
+        const result = await useGameStore.getState().saveCurrentRound('paused');
+
+        expect(useGameStore.getState().savedRounds.find(r => r.id === result.roundId)?.settings.nearPinRate).toBe(500);
+    });
+});

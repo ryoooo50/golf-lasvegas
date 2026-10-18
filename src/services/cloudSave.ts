@@ -10,6 +10,7 @@ export interface RoundSaveData {
   push_limit: number;
   push_recovery_on_birdie: number;
   push_recovery_on_eagle: number;
+  near_pin_rate?: number;                 // ニアピン1回・1人あたりの額。0 = なし（未対応の古い保留データには無い）
   holes: unknown;                         // HoleResult[] を JSON で保存
   total_points: Record<string, number>;  // { playerId: totalPoints }
   status: 'paused' | 'completed';
