@@ -105,10 +105,10 @@ export function RoundDetailScreen() {
         <SafeAreaView style={styles.root} edges={['bottom', 'left', 'right']}>
             <ScreenHeader title={t('common.roundDetails')} subtitle={round.name} onBack={goBack} />
             <ScrollView contentContainerStyle={styles.body}>
+                {isShared && <Text style={styles.sharedNote}>{t('common.sharedReadOnly')}</Text>}
                 <View ref={cardRef} collapsable={false} style={styles.resultCard}>
                     <Text style={styles.brand}>GOLF LAS VEGAS</Text>
                     <Text style={styles.title}>{round.name}</Text>
-                    {isShared && <Text style={styles.sharedNote}>{t('common.sharedReadOnly')}</Text>}
                     <Text style={styles.meta}>
                         {[round.settings.courseName, round.settings.playedAt].filter(Boolean).join('  /  ') || t('common.courseDateUnset')}
                     </Text>

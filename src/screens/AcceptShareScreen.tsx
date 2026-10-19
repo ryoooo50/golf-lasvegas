@@ -37,10 +37,17 @@ export const AcceptShareScreen = () => {
         setStatus('accepting');
         try {
             const { roundId, isOwner } = await acceptSharedRound(shareToken);
+            // 読み込みに失敗したまま詳細へ進むと「見つかりません」になるので、エラー表示にして再試行できるようにする
+            let isLoaded: boolean;
             if (isOwner) {
                 await useGameStore.getState().loadCloudRounds();
+                isLoaded = useGameStore.getState().savedRounds.some(r => r.id === roundId);
             } else {
-                await useSharedRoundsStore.getState().loadSharedRounds(viewerId);
+                isLoaded = await useSharedRoundsStore.getState().loadSharedRounds(viewerId);
+            }
+            if (!isLoaded) {
+                setStatus('error');
+                return;
             }
             router.replace({ pathname: '/round-detail', params: { id: roundId } });
         } catch (error) {

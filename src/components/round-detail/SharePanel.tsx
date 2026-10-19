@@ -33,7 +33,7 @@ export function SharePanel({ cloudRoundId }: SharePanelProps) {
         setIsLoading(true);
         fetchShareStatus(cloudRoundId)
             .then(result => { if (!isCancelled) setStatus(result); })
-            .catch(() => { if (!isCancelled) { setHasLoadFailed(true); showNetworkError(); } })
+            .catch(() => { if (!isCancelled) setHasLoadFailed(true); })
             .finally(() => { if (!isCancelled) setIsLoading(false); });
         return () => { isCancelled = true; };
     }, [cloudRoundId, reloadKey, showNetworkError]);

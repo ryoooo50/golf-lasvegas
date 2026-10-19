@@ -865,7 +865,6 @@ export const useGameStore = create<GameStore>()(
                     const cloudRounds = await cloudSave.loadUserRounds(authUser.id);
                     const mapped: RoundResult[] = cloudRounds.map((r) => toRoundResult(r, INITIAL_STATE.settings));
 
-
                     // ローカル履歴とマージ（IDで重複排除）
                     const { savedRounds } = get();
                     const localIds = new Set(savedRounds.map(r => r.id));

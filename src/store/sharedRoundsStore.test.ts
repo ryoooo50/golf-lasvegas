@@ -1,5 +1,5 @@
 import { RoundResult } from '../types';
-import { SavedRound } from '../services/cloudSave';
+import { CloudSaveError, SavedRound } from '../services/cloudSave';
 import { fetchSharedRounds, leaveSharedRound } from '../services/roundShares';
 import { useSharedRoundsStore } from './sharedRoundsStore';
 
@@ -8,6 +8,16 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
     setItem: jest.fn(),
     removeItem: jest.fn(() => Promise.resolve()),
 }));
+
+// 実物は認証クライアント（react-native）を読み込むので、エラー判定に必要な分だけ差し替える
+jest.mock('../services/cloudSave', () => {
+    class CloudSaveError extends Error {
+        constructor(message: string, readonly status: number) {
+            super(message);
+        }
+    }
+    return { CloudSaveError, isRoundNotFound: (e: unknown) => e instanceof CloudSaveError && e.status === 404 };
+});
 
 jest.mock('./gameStore', () => ({ INITIAL_STATE: { settings: {} } }));
 
@@ -72,6 +82,14 @@ describe('sharedRoundsStore', () => {
         expect(useSharedRoundsStore.getState().viewerId).toBe('u1');
     });
 
+    test('resolves true on success and false on failure', async () => {
+        mocked(fetchSharedRounds).mockResolvedValueOnce([savedRow({ id: 'new' })]);
+        await expect(useSharedRoundsStore.getState().loadSharedRounds('u1')).resolves.toBe(true);
+        mocked(fetchSharedRounds).mockRejectedValueOnce(new Error('offline'));
+        await expect(useSharedRoundsStore.getState().loadSharedRounds('u1')).resolves.toBe(false);
+        expect(useSharedRoundsStore.getState().rounds.map(r => r.id)).toEqual(['new']);
+    });
+
     test('shows shared rounds only to the user they were loaded for', () => {
         useSharedRoundsStore.setState({ viewerId: 'u1', rounds: [round('r')] });
         expect(useSharedRoundsStore.getState().visibleSharedRounds('u1').map(r => r.id)).toEqual(['r']);
@@ -88,5 +106,12 @@ describe('sharedRoundsStore', () => {
         mocked(leaveSharedRound).mockRejectedValueOnce(new Error('fail'));
         await expect(useSharedRoundsStore.getState().removeSharedRound('b')).resolves.toBe(false);
         expect(useSharedRoundsStore.getState().rounds.map(r => r.id)).toEqual(['b']);
+    });
+
+    test('removes the round locally when the share is already gone (404)', async () => {
+        useSharedRoundsStore.setState({ viewerId: 'u1', rounds: [round('a')] });
+        mocked(leaveSharedRound).mockRejectedValueOnce(new CloudSaveError('not found', 404));
+        await expect(useSharedRoundsStore.getState().removeSharedRound('a')).resolves.toBe(true);
+        expect(useSharedRoundsStore.getState().rounds).toEqual([]);
     });
 });
