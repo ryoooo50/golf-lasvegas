@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import i18n from '../i18n/i18n';
 import * as cloudSave from '../services/cloudSave';
+import { toRoundResult } from '../services/cloudRoundMapper';
 import { useAuthStore } from './authStore';
 import { GameState, HoleDraft, HoleResult, PendingCloudSave, Player, PlayerHandicap, PlayerId, PlayerProfile, RoundResult, RoundStatus, SaveRoundResult, ScoreInput } from '../types';
 import { calculateHoleResult } from '../utils/golfLogic';
@@ -78,14 +79,6 @@ function buildRoundSaveData(
         played_at: settings.playedAt,
         memo: settings.memo,
     };
-}
-
-/** 履歴の最新ホールからプレイヤーのハンデを復元する（クラウドにはハンデ列が無いため） */
-function latestHandicapFromHistory(playerId: PlayerId, history: HoleResult[]): PlayerHandicap | undefined {
-    const latest = [...history]
-        .sort((a, b) => b.holeNumber - a.holeNumber)
-        .find(hole => hole.scores[playerId] !== undefined);
-    return latest?.scores[playerId]?.handicap;
 }
 
 function updatePlayerProfiles(profiles: PlayerProfile[], names: string[], ownerId: string): PlayerProfile[] {
@@ -318,7 +311,7 @@ const DEFAULT_PLAYERS: Player[] = [
     { id: 'p4', name: 'Player D', pushUsageCount: { front9: 0, back9: 0 } },
 ];
 
-const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
+export const INITIAL_STATE: Omit<GameState, 'players'> & { players: Player[] } = {
     players: DEFAULT_PLAYERS,
     currentHole: 1,
     startHole: 1,
@@ -870,46 +863,8 @@ export const useGameStore = create<GameStore>()(
                 try {
                     await get().syncPendingCloudSaves();
                     const cloudRounds = await cloudSave.loadUserRounds(authUser.id);
-                    const mapped: RoundResult[] = cloudRounds.map((r) => ({
-                        id: r.id,
-                        cloudId: r.id,
-                        date: r.created_at,
-                        name: r.match_name,
-                        players: Object.entries(r.player_names).map(([id, name]) => {
-                            const handicap = latestHandicapFromHistory(id, (r.holes as HoleResult[]) ?? []);
-                            return {
-                                id,
-                                name,
-                                type: id === BOGEY_KUN_ID ? 'bogey_kun' as const : 'real' as const,
-                                pushUsageCount: { front9: 0, back9: 0 },
-                                ...(handicap ? { handicap } : {}),
-                            };
-                        }),
-                        history: (r.holes as HoleResult[]) ?? [],
-                        finalScores: r.total_points,
-                        gameStatus: r.status ?? 'completed',
-                        currentHole: r.current_hole ?? 18,
-                        startHole: r.start_hole ?? 1,
-                        roundLength: r.round_length ?? 18,
-                        settings: {
-                            ...INITIAL_STATE.settings,
-                            matchName: r.match_name,
-                            rate: r.rate,
-                            playerCount: r.player_count as 3 | 4,
-                            maxPushCountPerHalf: r.push_limit,
-                            pushRecoveryOnBirdie: r.push_recovery_on_birdie,
-                            pushRecoveryOnEagle: r.push_recovery_on_eagle,
-                            nearPinRate: r.near_pin_rate ?? 0,
-                            roundLength: r.round_length ?? 18,
-                            courseName: r.course_name ?? '',
-                            playedAt: r.played_at ?? '',
-                            memo: r.memo ?? '',
-                        },
-                        draftHole: (r.draft_hole as HoleDraft | null) ?? null,
-                        updatedAt: r.updated_at,
-                        ownerId: r.user_id,
-                        playerRanking: r.player_ranking ?? [],
-                    }));
+                    const mapped: RoundResult[] = cloudRounds.map((r) => toRoundResult(r, INITIAL_STATE.settings));
+
 
                     // ローカル履歴とマージ（IDで重複排除）
                     const { savedRounds } = get();

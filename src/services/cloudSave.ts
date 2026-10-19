@@ -44,7 +44,7 @@ export function isRoundNotFound(error: unknown): boolean {
   return error instanceof CloudSaveError && error.status === 404;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     credentials: API_CREDENTIALS,
@@ -75,7 +75,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
  * 新規ラウンドを保存し、生成された UUID を返す。
  */
 export async function saveRound(_userId: string, roundData: RoundSaveData): Promise<string> {
-  const { id } = await request<{ id: string }>('/api/rounds', {
+  const { id } = await apiRequest<{ id: string }>('/api/rounds', {
     method: 'POST',
     body: JSON.stringify(roundData),
   });
@@ -86,7 +86,7 @@ export async function saveRound(_userId: string, roundData: RoundSaveData): Prom
  * 既存ラウンドを部分更新する。見つからない場合は CloudSaveError(404)。
  */
 export async function updateRound(roundId: string, roundData: Partial<RoundSaveData>): Promise<void> {
-  await request(`/api/rounds?id=${encodeURIComponent(roundId)}`, {
+  await apiRequest(`/api/rounds?id=${encodeURIComponent(roundId)}`, {
     method: 'PATCH',
     body: JSON.stringify(roundData),
   });
@@ -111,7 +111,7 @@ export async function upsertRound(userId: string, cloudRoundId: string | null | 
  * ユーザーの全ラウンドを新しい順で取得する。
  */
 export async function loadUserRounds(_userId: string): Promise<SavedRound[]> {
-  const { rounds } = await request<{ rounds: SavedRound[] }>('/api/rounds');
+  const { rounds } = await apiRequest<{ rounds: SavedRound[] }>('/api/rounds');
   return rounds;
 }
 
@@ -120,7 +120,7 @@ export async function loadUserRounds(_userId: string): Promise<SavedRound[]> {
  */
 export async function deleteRound(roundId: string): Promise<void> {
   try {
-    await request(`/api/rounds?id=${encodeURIComponent(roundId)}`, { method: 'DELETE' });
+    await apiRequest(`/api/rounds?id=${encodeURIComponent(roundId)}`, { method: 'DELETE' });
   } catch (error: unknown) {
     if (!isRoundNotFound(error)) throw error;
   }
