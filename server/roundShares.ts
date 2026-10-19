@@ -51,3 +51,49 @@ export async function stopSharing(pool: pg.Pool, ownerId: string, roundId: strin
     );
     return (rowCount ?? 0) > 0;
 }
+
+/** 無効なトークンは null。オーナー本人はメンバー登録しない */
+export async function acceptShare(
+    pool: pg.Pool,
+    userId: string,
+    token: string,
+): Promise<{ roundId: string; isOwner: boolean } | null> {
+    const { rows } = await pool.query<{ round_id: string; user_id: string }>(
+        `select s.round_id, r.user_id
+           from round_shares s join rounds r on r.id = s.round_id
+          where s.token = $1`,
+        [token],
+    );
+    if (rows.length === 0) return null;
+    const { round_id: roundId, user_id: ownerId } = rows[0];
+    if (ownerId === userId) return { roundId, isOwner: true };
+    await pool.query(
+        `insert into round_share_members (round_id, user_id) values ($1, $2) on conflict do nothing`,
+        [roundId, userId],
+    );
+    return { roundId, isOwner: false };
+}
+
+/** 自分がメンバーで、共有リンクが有効なラウンド */
+export async function listSharedRounds(pool: pg.Pool, userId: string): Promise<unknown[]> {
+    const { rows } = await pool.query(
+        `select r.*
+           from round_share_members m
+           join rounds r on r.id = m.round_id
+           join round_shares s on s.round_id = r.id
+          where m.user_id = $1
+          order by r.created_at desc
+          limit 500`,
+        [userId],
+    );
+    return rows;
+}
+
+/** 自分の一覧から外す。メンバーでなければ false */
+export async function leaveSharedRound(pool: pg.Pool, userId: string, roundId: string): Promise<boolean> {
+    const { rowCount } = await pool.query(
+        'delete from round_share_members where round_id = $1 and user_id = $2',
+        [roundId, userId],
+    );
+    return (rowCount ?? 0) > 0;
+}
