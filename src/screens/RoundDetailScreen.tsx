@@ -6,6 +6,7 @@ import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
+import { SharePanel } from '../components/round-detail/SharePanel';
 import { ScreenHeader } from '../components/shared/ScreenHeader';
 import { exportRoundCsv, exportRoundPdf } from '../services/roundExport';
 import { useAuthStore } from '../store/authStore';
@@ -151,6 +152,8 @@ export function RoundDetailScreen() {
                         {t('common.exportPdf')}
                     </Button>
                 </View>
+
+                <SharePanel cloudRoundId={user ? round.cloudId ?? null : null} />
             </ScrollView>
         </SafeAreaView>
     );

@@ -207,6 +207,17 @@ export default {
             errorBanned: "このアカウントは利用停止中です。管理者に連絡してください。",
             errorUnknown: "処理に失敗しました（{{detail}}）",
             cloudQueued: "クラウド保存はオンライン復帰後に同期されます",
+            shareTitle: "共有",
+            shareUnavailable: "ログインしてクラウドに保存されたラウンドだけ共有できます",
+            shareDescription: "リンクを開いてログインした人が、このラウンドを見られるようになります（編集はできません）",
+            shareCreateLink: "共有リンクを作る",
+            shareActive: "共有中（{{count}}人が追加済み）",
+            shareSend: "LINE などで送る",
+            shareCopy: "コピー",
+            shareCopied: "コピーしました",
+            shareStop: "共有をやめる",
+            shareStopConfirm: "共有をやめると、このリンクは使えなくなり、追加済みの人からも見えなくなります。",
+            shareNetworkError: "通信できませんでした。時間をおいてもう一度お試しください。",
         },
     }
 };

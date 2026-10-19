@@ -207,6 +207,17 @@ export default {
             errorBanned: "This account has been suspended. Please contact the administrator.",
             errorUnknown: "Something went wrong ({{detail}})",
             cloudQueued: "Cloud save will sync when you are back online",
+            shareTitle: "Sharing",
+            shareUnavailable: "Only rounds saved to the cloud while signed in can be shared",
+            shareDescription: "Anyone who opens the link and signs in can view this round (they cannot edit it)",
+            shareCreateLink: "Create share link",
+            shareActive: "Shared ({{count}} added)",
+            shareSend: "Send via LINE etc.",
+            shareCopy: "Copy",
+            shareCopied: "Copied",
+            shareStop: "Stop sharing",
+            shareStopConfirm: "If you stop sharing, this link will stop working and the round will no longer be visible to people who already added it.",
+            shareNetworkError: "Could not connect. Please try again later.",
         },
     }
 };
