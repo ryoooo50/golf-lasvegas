@@ -16,7 +16,14 @@ const FEATURE_PILLS: { icon: keyof typeof Ionicons.glyphMap; label: string }[] =
     { icon: 'time-outline', label: 'CARRY OVER' },
 ];
 
-export const AuthScreen = () => {
+interface AuthScreenProps {
+    /** フォーム上に1行表示する案内（共有リンク経由など） */
+    message?: string;
+    /** false ならゲスト開始ボタンを出さない */
+    allowGuest?: boolean;
+}
+
+export const AuthScreen = ({ message, allowGuest = true }: AuthScreenProps) => {
     const { t } = useTranslation();
     const { signIn, signUp, playAsGuest, isLoading, error, notice } = useAuthStore();
 
@@ -93,6 +100,7 @@ export const AuthScreen = () => {
                     </View>
 
                     <View style={styles.card}>
+                        {message ? <Text style={styles.messageText}>{message}</Text> : null}
                         <TextInput
                             label={t('auth.email')}
                             value={email}
@@ -134,14 +142,16 @@ export const AuthScreen = () => {
                         </Button>
                     </View>
 
-                    <Button
-                        mode="text"
-                        onPress={() => playAsGuest()}
-                        style={styles.guestButton}
-                        textColor={C.ink3}
-                    >
-                        {t('auth.guestButton')} →
-                    </Button>
+                    {allowGuest && (
+                        <Button
+                            mode="text"
+                            onPress={() => playAsGuest()}
+                            style={styles.guestButton}
+                            textColor={C.ink3}
+                        >
+                            {t('auth.guestButton')} →
+                        </Button>
+                    )}
                 </ScrollView>
             </SafeAreaView>
         </View>
@@ -183,6 +193,7 @@ const styles = StyleSheet.create({
     card: { backgroundColor: C.surface, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 20, gap: 4 },
     input: { marginBottom: 12, backgroundColor: C.surface },
     errorText: { color: C.coralPrimary, fontSize: 13, marginBottom: 8, textAlign: 'center' },
+    messageText: { color: C.ink2, fontSize: 13, marginBottom: 12, textAlign: 'center' },
     noticeText: { color: C.ink2, fontSize: 13, marginBottom: 8, textAlign: 'center' },
     submitButton: { marginTop: 8, borderRadius: 8 },
     submitContent: { height: 50 },

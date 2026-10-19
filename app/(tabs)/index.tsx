@@ -5,6 +5,7 @@ import { ScoreInputScreen } from '../../src/screens/ScoreInputScreen';
 import { StartScreen } from '../../src/screens/StartScreen';
 import { useAuthStore } from '../../src/store/authStore';
 import { useGameStore } from '../../src/store/gameStore';
+import { useSharedRoundsStore } from '../../src/store/sharedRoundsStore';
 
 export default function HomeScreen() {
   const { user, isGuest, isLoading, initialize } = useAuthStore();
@@ -24,6 +25,7 @@ export default function HomeScreen() {
     if (!user || isGuest) return;
     claimLegacyLocalData(user.id);
     loadCloudRounds();
+    void useSharedRoundsStore.getState().loadSharedRounds(user.id);
   }, [user, isGuest, claimLegacyLocalData, loadCloudRounds]);
 
   if (isLoading) {

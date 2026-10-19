@@ -11,9 +11,14 @@ import { ScreenHeader } from '../components/shared/ScreenHeader';
 import { exportRoundCsv, exportRoundPdf } from '../services/roundExport';
 import { useAuthStore } from '../store/authStore';
 import { useGameStore } from '../store/gameStore';
+import { useSharedRoundsStore } from '../store/sharedRoundsStore';
+import { RoundResult } from '../types';
 import { C } from '../theme/colors';
 import { nearPinAmountsForRound } from '../utils/nearPin';
 import { calculateMinimumSettlement } from '../utils/settlement';
+
+// 共有ラウンドの取得結果で再描画するため、store から直接購読する
+const EMPTY_ROUNDS: RoundResult[] = [];
 
 function formatSignedAmount(amount: number): string {
     return `${amount > 0 ? '+' : ''}${amount.toLocaleString()}`;
@@ -25,9 +30,13 @@ export function RoundDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const { user, isGuest } = useAuthStore();
     const ownerId = user?.id ?? (isGuest ? 'guest' : null);
-    const round = useGameStore(state => state.savedRounds.find(item =>
+    const ownRound = useGameStore(state => state.savedRounds.find(item =>
         item.id === id && (item.ownerId === ownerId || (!item.ownerId && isGuest)),
     ));
+    const sharedRounds = useSharedRoundsStore(state => (user && state.viewerId === user.id ? state.rounds : EMPTY_ROUNDS));
+    const sharedRound = ownRound ? undefined : sharedRounds.find(item => item.id === id);
+    const round = ownRound ?? sharedRound;
+    const isShared = sharedRound !== undefined;
     const cardRef = useRef<View>(null);
     const [isExporting, setIsExporting] = useState(false);
     const nearPinAmounts = useMemo(() => round ? nearPinAmountsForRound(round) : {}, [round]);
@@ -97,6 +106,7 @@ export function RoundDetailScreen() {
                 <View ref={cardRef} collapsable={false} style={styles.resultCard}>
                     <Text style={styles.brand}>GOLF LAS VEGAS</Text>
                     <Text style={styles.title}>{round.name}</Text>
+                    {isShared && <Text style={styles.sharedNote}>{t('common.sharedReadOnly')}</Text>}
                     <Text style={styles.meta}>
                         {[round.settings.courseName, round.settings.playedAt].filter(Boolean).join('  /  ') || t('common.courseDateUnset')}
                     </Text>
@@ -153,7 +163,7 @@ export function RoundDetailScreen() {
                     </Button>
                 </View>
 
-                <SharePanel cloudRoundId={user ? round.cloudId ?? null : null} />
+                {!isShared && <SharePanel cloudRoundId={user ? round.cloudId ?? null : null} />}
             </ScrollView>
         </SafeAreaView>
     );
@@ -166,6 +176,7 @@ const styles = StyleSheet.create({
     resultCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: 10, padding: 20 },
     brand: { color: C.greenPrimary, fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
     title: { color: C.ink, fontSize: 24, fontWeight: '800', marginTop: 6 },
+    sharedNote: { color: C.ink2, fontSize: 12, marginTop: 4 },
     meta: { color: C.ink3, fontSize: 12, marginTop: 4 },
     memo: { color: C.ink2, fontSize: 12, lineHeight: 18, backgroundColor: C.surface2, padding: 10, borderRadius: 6, marginTop: 12 },
     sectionTitle: { color: C.ink3, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 22, marginBottom: 8 },
