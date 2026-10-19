@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import * as authApi from '../api/auth.js';
+import * as roundSharesApi from '../api/round-shares.js';
 import * as roundsApi from '../api/rounds.js';
 import { getPool } from './db.js';
 
@@ -48,6 +49,14 @@ function roundsRequest(method: string, cookie: string | null, { id, body }: { id
         body: body === undefined ? undefined : JSON.stringify(body),
     });
     const handler = { GET: roundsApi.GET, POST: roundsApi.POST, PATCH: roundsApi.PATCH, DELETE: roundsApi.DELETE }[method];
+    assert.ok(handler);
+    return handler(request);
+}
+
+function roundSharesRequest(method: string, cookie: string | null, roundId?: string) {
+    const url = `${ORIGIN}/api/round-shares${roundId ? `?roundId=${roundId}` : ''}`;
+    const request = new Request(url, { method, headers: cookie ? { Cookie: cookie } : {} });
+    const handler = { GET: roundSharesApi.GET, POST: roundSharesApi.POST, DELETE: roundSharesApi.DELETE }[method];
     assert.ok(handler);
     return handler(request);
 }
@@ -160,6 +169,43 @@ describe('api', { skip: !process.env.DATABASE_URL }, () => {
         assert.equal((await roundsRequest('POST', alice, { body: { ...ROUND, status: 'bogus' } })).status, 400);
         assert.equal((await roundsRequest('POST', alice, { body: { memo: 'only' } })).status, 400);
         assert.equal((await roundsRequest('POST', alice, { body: { ...ROUND, rate: 'ten' } })).status, 400);
+    });
+
+    describe('round sharing', () => {
+        test('owner creates one link per round and reads its status', async () => {
+            const { id } = await (await roundsRequest('POST', alice, { body: ROUND })).json();
+            assert.deepEqual(await (await roundSharesRequest('GET', alice, id)).json(), { token: null, memberCount: 0 });
+            const first = await (await roundSharesRequest('POST', alice, id)).json();
+            assert.match(first.token, /^[A-Za-z0-9_-]{32}$/);
+            const second = await (await roundSharesRequest('POST', alice, id)).json();
+            assert.equal(second.token, first.token);
+        });
+
+        test("cannot create, read or stop a link for another user's round", async () => {
+            const { id } = await (await roundsRequest('POST', alice, { body: ROUND })).json();
+            assert.equal((await roundSharesRequest('POST', bob, id)).status, 404);
+            assert.equal((await roundSharesRequest('GET', bob, id)).status, 404);
+            assert.equal((await roundSharesRequest('DELETE', bob, id)).status, 404);
+            assert.equal((await roundSharesRequest('GET', null, id)).status, 401);
+            assert.equal((await roundSharesRequest('POST', alice, 'not-a-uuid')).status, 404);
+        });
+
+        test('stopping then sharing again issues a new token', async () => {
+            const { id } = await (await roundsRequest('POST', alice, { body: ROUND })).json();
+            const { token } = await (await roundSharesRequest('POST', alice, id)).json();
+            assert.equal((await roundSharesRequest('DELETE', alice, id)).status, 204);
+            assert.deepEqual(await (await roundSharesRequest('GET', alice, id)).json(), { token: null, memberCount: 0 });
+            const again = await (await roundSharesRequest('POST', alice, id)).json();
+            assert.notEqual(again.token, token);
+        });
+
+        test('deleting a round removes its link', async () => {
+            const { id } = await (await roundsRequest('POST', alice, { body: ROUND })).json();
+            await roundSharesRequest('POST', alice, id);
+            await roundsRequest('DELETE', alice, { id });
+            const { rows } = await getPool().query('select count(*)::int as n from round_shares where round_id = $1', [id]);
+            assert.equal(rows[0].n, 0);
+        });
     });
 
     describe('admin', () => {

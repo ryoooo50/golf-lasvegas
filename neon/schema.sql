@@ -59,3 +59,19 @@ drop trigger if exists rounds_updated_at on rounds;
 create trigger rounds_updated_at
   before update on rounds
   for each row execute function update_updated_at();
+
+-- ラウンドの共有リンク（1ラウンド最大1本）
+create table if not exists round_shares (
+  round_id uuid primary key references rounds (id) on delete cascade,
+  token text not null unique,
+  created_at timestamptz default now() not null
+);
+
+-- 共有リンクから受け取ったユーザー
+create table if not exists round_share_members (
+  round_id uuid not null references rounds (id) on delete cascade,
+  user_id text not null references "user" ("id") on delete cascade,
+  created_at timestamptz default now() not null,
+  primary key (round_id, user_id)
+);
+create index if not exists round_share_members_user_id_idx on round_share_members (user_id);
