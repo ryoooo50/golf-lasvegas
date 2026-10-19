@@ -18,6 +18,8 @@ export function SharePanel({ cloudRoundId }: SharePanelProps) {
     const [status, setStatus] = useState<ShareStatus | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isBusy, setIsBusy] = useState(false);
+    const [reloadKey, setReloadKey] = useState(0);
+    const [hasLoadFailed, setHasLoadFailed] = useState(false);
 
     const showNetworkError = useCallback(() => {
         notify(t('common.shareTitle'), t('common.shareNetworkError'), t('common.ok'));
@@ -25,15 +27,16 @@ export function SharePanel({ cloudRoundId }: SharePanelProps) {
 
     useEffect(() => {
         setStatus(null);
+        setHasLoadFailed(false);
         if (!cloudRoundId) return;
         let isCancelled = false;
         setIsLoading(true);
         fetchShareStatus(cloudRoundId)
             .then(result => { if (!isCancelled) setStatus(result); })
-            .catch(() => { if (!isCancelled) showNetworkError(); })
+            .catch(() => { if (!isCancelled) { setHasLoadFailed(true); showNetworkError(); } })
             .finally(() => { if (!isCancelled) setIsLoading(false); });
         return () => { isCancelled = true; };
-    }, [cloudRoundId, showNetworkError]);
+    }, [cloudRoundId, reloadKey, showNetworkError]);
 
     // 通信中の連打を防ぎつつ、失敗時は共通のエラーを出す
     const runRequest = async (task: () => Promise<void>) => {
@@ -104,7 +107,18 @@ export function SharePanel({ cloudRoundId }: SharePanelProps) {
             <Text style={styles.title}>{t('common.shareTitle')}</Text>
             {!cloudRoundId ? (
                 <Text style={styles.body}>{t('common.shareUnavailable')}</Text>
-            ) : isLoading || !status ? null : url ? (
+            ) : isLoading ? null : !status ? (
+                hasLoadFailed ? (
+                    <>
+                        <Text style={styles.body}>{t('common.shareNetworkError')}</Text>
+                        <View style={styles.buttons}>
+                            <Button mode="outlined" onPress={() => setReloadKey(key => key + 1)} contentStyle={styles.buttonContent}>
+                                {t('common.shareRetry')}
+                            </Button>
+                        </View>
+                    </>
+                ) : null
+            ) : url ? (
                 <>
                     <Text style={styles.status}>{t('common.shareActive', { count: status.memberCount })}</Text>
                     <Text style={styles.url} numberOfLines={1} ellipsizeMode="middle" selectable>{url}</Text>

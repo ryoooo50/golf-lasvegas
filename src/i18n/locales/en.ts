@@ -218,6 +218,7 @@ export default {
             shareStop: "Stop sharing",
             shareStopConfirm: "If you stop sharing, this link will stop working and the round will no longer be visible to people who already added it.",
             shareNetworkError: "Could not connect. Please try again later.",
+            shareRetry: "Retry",
         },
     }
 };

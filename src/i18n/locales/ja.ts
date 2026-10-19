@@ -218,6 +218,7 @@ export default {
             shareStop: "共有をやめる",
             shareStopConfirm: "共有をやめると、このリンクは使えなくなり、追加済みの人からも見えなくなります。",
             shareNetworkError: "通信できませんでした。時間をおいてもう一度お試しください。",
+            shareRetry: "再試行",
         },
     }
 };
