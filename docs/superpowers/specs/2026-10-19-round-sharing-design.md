@@ -48,7 +48,7 @@
 
 ### 友人
 
-1. LINE でリンク（`https://golf-lasvegas.vercel.app/share/<token>`）をタップ。
+1. LINE でリンク（`https://golf-lasvegas.vercel.app/share?token=<token>`）をタップ。
 2. ログインしていなければログイン画面を出す（「共有されたラウンドを見るにはログインしてください」）。
 3. ログイン済みになったらサーバーに受け取りを登録し、そのラウンドの詳細（閲覧専用）を表示する。
 4. 以後はアプリの履歴画面の「共有されたラウンド」から開ける。
@@ -123,12 +123,12 @@ create index if not exists round_share_members_user_id_idx on round_share_member
 
 ## クライアント
 
-- **ルート**: `/share/[token]` を追加。このルートは単体で開かれる（直リンク）ため、`authStore.initialize()` を自分でも呼ぶこと（今は `app/(tabs)/index.tsx` だけが呼んでいる）。未ログイン・ゲストなら `AuthScreen` を出し、ログイン後に受け取りを続行する。
+- **ルート**: `/share`（`?token=` で受け取る）を追加。既存の `/round-detail?id=` と同じクエリ形式にして、静的書き出しで動的ルートを使わない。このルートは単体で開かれる（直リンク）ため、`authStore.initialize()` を自分でも呼ぶこと（今は `app/(tabs)/index.tsx` だけが呼んでいる）。未ログイン・ゲストなら `AuthScreen` を出し、ログイン後に受け取りを続行する。
 - **ストア**: 共有されたラウンドは自分の `savedRounds` と分けて `sharedRounds` として持つ（端末に保存して、オフラインでも前回取得分を見られるようにする）。取得は、ログイン時（今 `loadCloudRounds` を呼んでいる箇所）と履歴画面を開いたとき。`SavedRound` → `RoundResult` の変換は `loadCloudRounds` の既存ロジックを共通化して使う。
 - **履歴画面**: 自分のラウンド一覧の下に「共有されたラウンド」セクション（無ければ出さない）。各行は「詳細」と「一覧から外す」だけ。
 - **ラウンド詳細**: `id` で自分のラウンドに無ければ `sharedRounds` から探す。共有ラウンドなら「共有されたラウンド」と表示し、オーナー向けの共有パネルは出さない。自分のラウンドなら共有パネル（作る／送る・コピー／共有中 N人／やめる）を出す。
-- **リンクの URL**: Web は `window.location.origin`、ネイティブは `EXPO_PUBLIC_API_URL` をベースに `/share/<token>`。
-- **送る**: Web は `navigator.share`（使えなければコピー）、ネイティブは React Native の `Share`。
+- **リンクの URL**: `getApiBaseUrl()`（Web はページのオリジン、ネイティブは `EXPO_PUBLIC_API_URL`）に `/share?token=<token>` を付ける。
+- **送る**: Web は `navigator.share`（使えなければコピー）、ネイティブは React Native の `Share`。コピーボタンは Web（`navigator.clipboard` がある場合）だけ。新しい依存は足さない。
 - **文言**: ja / en の両方に追加。
 
 ## エッジケース
@@ -161,7 +161,6 @@ create index if not exists round_share_members_user_id_idx on round_share_member
 
 - 画面の細かいレイアウト（既存のラウンド詳細・履歴のカードやボタンに合わせる）。
 - `sharedRounds` の保存キーやストア内の関数名。
-- ルートファイルの置き場所（`app/share/[token].tsx` か `(tabs)` 配下か）。
 - 一覧取得の再試行・エラー時の表示（既存の `loadCloudRounds` と同程度でよい）。
 
 ## 私（Claude）の判断で決めた点（ユーザー未確認）
