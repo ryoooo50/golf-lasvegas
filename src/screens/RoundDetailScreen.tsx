@@ -37,6 +37,8 @@ export function RoundDetailScreen() {
     const sharedRound = ownRound ? undefined : sharedRounds.find(item => item.id === id);
     const round = ownRound ?? sharedRound;
     const isShared = sharedRound !== undefined;
+    // 共有リンクから replace で開いた場合は戻り先が無いのでホームへ
+    const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
     const cardRef = useRef<View>(null);
     const [isExporting, setIsExporting] = useState(false);
     const nearPinAmounts = useMemo(() => round ? nearPinAmountsForRound(round) : {}, [round]);
@@ -48,7 +50,7 @@ export function RoundDetailScreen() {
     if (!round) {
         return (
             <SafeAreaView style={styles.root}>
-                <ScreenHeader title={t('common.roundDetails')} onBack={() => router.back()} />
+                <ScreenHeader title={t('common.roundDetails')} onBack={goBack} />
                 <Text style={styles.empty}>{t('common.roundNotFound')}</Text>
             </SafeAreaView>
         );
@@ -101,7 +103,7 @@ export function RoundDetailScreen() {
 
     return (
         <SafeAreaView style={styles.root} edges={['bottom', 'left', 'right']}>
-            <ScreenHeader title={t('common.roundDetails')} subtitle={round.name} onBack={() => router.back()} />
+            <ScreenHeader title={t('common.roundDetails')} subtitle={round.name} onBack={goBack} />
             <ScrollView contentContainerStyle={styles.body}>
                 <View ref={cardRef} collapsable={false} style={styles.resultCard}>
                     <Text style={styles.brand}>GOLF LAS VEGAS</Text>
